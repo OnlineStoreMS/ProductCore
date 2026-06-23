@@ -1,0 +1,18 @@
+server:
+  port: 8090
+  mode: debug
+
+database:
+  driver: mysql
+  sqlite_path: ./data/productcore.db
+  mysql_dsn: "root:root@tcp(127.0.0.1:3306)/productcore?charset=utf8mb4&parseTime=True&loc=Local"
+
+redis:
+  enabled: false
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+
+cors:
+  allow_origins:
+    - "http://localhost:5173"

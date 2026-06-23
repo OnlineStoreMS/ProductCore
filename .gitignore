@@ -1,0 +1,35 @@
+# Go
+bin/
+*.exe
+*.test
+*.out
+.tmp/
+
+# 本地数据库与运行时数据
+data/
+*.db
+
+# 本地配置（提交 config.example.yaml）
+configs/config.yaml
+
+# 前端构建产物与依赖（web/.gitignore 补充）
+web/node_modules/
+web/dist/
+
+# Swagger 生成物
+docs/swagger/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# 环境变量与密钥
+.env
+.env.*
+!.env.example
+
+# 日志
+*.log
