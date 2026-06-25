@@ -3,16 +3,36 @@ server:
   mode: debug
 
 database:
-  driver: mysql
-  sqlite_path: ./data/productcore.db
-  mysql_dsn: "root:root@tcp(127.0.0.1:3306)/productcore?charset=utf8mb4&parseTime=True&loc=Local"
+  driver: postgres
+  postgres_dsn: "host=127.0.0.1 user=postgres password=postgres dbname=productcore port=5432 sslmode=disable TimeZone=Asia/Shanghai"
 
 redis:
   enabled: false
-  addr: "127.0.0.1:6379"
+  addr: "127.0.0.1:6380"
   password: ""
   db: 0
+  stream_key: "productcore:product:events"
+  cache_ttl: 300
+
+auth:
+  enabled: false
+  admin_token: "dev-admin-token"
+
+storage:
+  driver: minio                  # local | minio
+  prefix: "uploads"
+  local_path: "./data/uploads"   # driver: local 时生效
+  public_base_url: "http://127.0.0.1:9100/productcore"
+  minio:
+    endpoint: "127.0.0.1:9100"
+    access_key: "minioadmin"
+    secret_key: "minioadmin"
+    bucket: "productcore"
+    use_ssl: false
+    prefix: "uploads"
+    public_read: true
 
 cors:
   allow_origins:
     - "http://localhost:5173"
+    - "http://127.0.0.1:5173"

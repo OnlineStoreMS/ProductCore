@@ -20,6 +20,18 @@ func NewProductHandler(svc *service.ProductService) *ProductHandler {
 	return &ProductHandler{svc: svc}
 }
 
+// ListPublished godoc
+//
+//	@Summary		已上架商品列表
+//	@Tags			open-商品
+//	@Produce		json
+//	@Param			keyword		query	string	false	"关键字"
+//	@Param			brandId		query	int		false	"品牌 ID"
+//	@Param			categoryId	query	int		false	"分类 ID"
+//	@Param			page		query	int		false	"页码"
+//	@Param			pageSize	query	int		false	"每页条数"
+//	@Success		200			{object}	response.ProductPageResp
+//	@Router			/open/products [get]
 func (h *ProductHandler) ListPublished(c *gin.Context) {
 	var q dto.ProductQuery
 	if err := c.ShouldBindQuery(&q); err != nil {
@@ -34,6 +46,15 @@ func (h *ProductHandler) ListPublished(c *gin.Context) {
 	response.OK(c, response.PageResult(list, total, q.Page, q.PageSize))
 }
 
+// GetPublished godoc
+//
+//	@Summary		已上架商品详情
+//	@Tags			open-商品
+//	@Produce		json
+//	@Param			id	path	int	true	"商品 ID"
+//	@Success		200	{object}	response.ProductResp
+//	@Failure		404	{object}	response.Body
+//	@Router			/open/products/{id} [get]
 func (h *ProductHandler) GetPublished(c *gin.Context) {
 	id, err := httputil.ParseID(c)
 	if err != nil {

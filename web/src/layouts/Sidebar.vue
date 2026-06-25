@@ -1,25 +1,43 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ArrowDown } from '@element-plus/icons-vue'
 import {
-  Box, Collection, FolderOpened, Grid, HomeFilled, Menu as MenuIcon, Setting,
+  Box, Collection, Delete, Document, FolderOpened, Grid, HomeFilled, Menu as MenuIcon, Setting, Shop,
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 const collapsed = defineModel<boolean>('collapsed', { default: false })
 
+type MenuLeaf = { path: string; title: string; icon: object }
+type MenuGroup = { title: string; icon: object; children: MenuLeaf[] }
+type MenuEntry = MenuLeaf | MenuGroup
+
+function isGroup(item: MenuEntry): item is MenuGroup {
+  return 'children' in item
+}
+
 const activeMenu = computed(() => route.path)
 
-const menuItems = [
+const menuItems: MenuEntry[] = [
   { path: '/dashboard', title: '工作台', icon: HomeFilled },
   {
     title: '商品管理',
     icon: Box,
     children: [
       { path: '/products', title: '商品列表', icon: Grid },
-      { path: '/products/create', title: '添加商品', icon: Collection },
+      { path: '/products/drafts', title: '商品草稿箱', icon: Document },
       { path: '/groups', title: '商品分组', icon: FolderOpened },
+      { path: '/products/trash', title: '商品回收站', icon: Delete },
+    ],
+  },
+  {
+    title: '渠道管理',
+    icon: Shop,
+    children: [
+      { path: '/platform-shops', title: '店铺管理', icon: Shop },
+      { path: '/platform-types', title: '店铺类型', icon: Grid },
     ],
   },
   {
@@ -32,6 +50,38 @@ const menuItems = [
   },
 ]
 
+function openKeysForPath(path: string): string[] {
+  if (path.startsWith('/products') || path.startsWith('/groups')) return ['商品管理']
+  if (path.startsWith('/platform')) return ['渠道管理']
+  if (path.startsWith('/categories') || path.startsWith('/brands')) return ['基础数据']
+  return []
+}
+
+const openKeys = ref<string[]>(openKeysForPath(route.path))
+
+watch(
+  () => route.path,
+  (path) => {
+    for (const key of openKeysForPath(path)) {
+      if (!openKeys.value.includes(key)) openKeys.value.push(key)
+    }
+  },
+)
+
+function isOpen(title: string) {
+  return openKeys.value.includes(title)
+}
+
+function toggleOpen(title: string) {
+  const i = openKeys.value.indexOf(title)
+  if (i >= 0) openKeys.value.splice(i, 1)
+  else openKeys.value.push(title)
+}
+
+function isGroupActive(item: MenuGroup) {
+  return item.children.some((c) => c.path === activeMenu.value)
+}
+
 function navigate(path: string) {
   router.push(path)
 }
@@ -41,42 +91,82 @@ function navigate(path: string) {
   <aside class="sidebar" :class="{ collapsed }">
     <div class="logo">
       <div class="logo-icon">P</div>
-      <transition name="fade">
-        <span v-if="!collapsed" class="logo-text">ProductCore</span>
-      </transition>
+      <span v-if="!collapsed" class="logo-text">ProductCore</span>
     </div>
-    <el-scrollbar class="menu-scroll">
-      <el-menu
-        :default-active="activeMenu"
-        :collapse="collapsed"
-        background-color="transparent"
-        text-color="rgba(255,255,255,0.75)"
-        active-text-color="#fff"
-        :collapse-transition="false"
-      >
-        <template v-for="item in menuItems" :key="item.title">
-          <el-sub-menu v-if="item.children" :index="item.title">
-            <template #title>
-              <el-icon><component :is="item.icon" /></el-icon>
-              <span>{{ item.title }}</span>
+
+    <div class="menu-scroll">
+      <nav class="nav-menu">
+        <template v-for="item in menuItems" :key="isGroup(item) ? item.title : item.path">
+          <!-- 一级菜单 -->
+          <div
+            v-if="!isGroup(item)"
+            class="nav-item"
+            :class="{ 'is-active': activeMenu === item.path }"
+            :title="collapsed ? item.title : undefined"
+            @click="navigate(item.path)"
+          >
+            <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
+            <span v-if="!collapsed" class="nav-label">{{ item.title }}</span>
+          </div>
+
+          <!-- 分组菜单：v-show 即时展开/收起，无高度动画 -->
+          <el-popover
+            v-else-if="collapsed"
+            placement="right-start"
+            trigger="click"
+            :width="168"
+            popper-class="sidebar-submenu-popper"
+          >
+            <template #reference>
+              <div
+                class="nav-item nav-group-title"
+                :class="{ 'is-active': isGroupActive(item) }"
+                :title="item.title"
+              >
+                <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
+              </div>
             </template>
-            <el-menu-item
-              v-for="child in item.children"
-              :key="child.path"
-              :index="child.path"
-              @click="navigate(child.path)"
+            <div class="popover-menu">
+              <div
+                v-for="child in item.children"
+                :key="child.path"
+                class="popover-item"
+                :class="{ 'is-active': activeMenu === child.path }"
+                @click="navigate(child.path)"
+              >
+                {{ child.title }}
+              </div>
+            </div>
+          </el-popover>
+
+          <div v-else class="nav-group">
+            <div
+              class="nav-item nav-group-title"
+              :class="{ 'is-active': isGroupActive(item) }"
+              @click="toggleOpen(item.title)"
             >
-              <el-icon><component :is="child.icon" /></el-icon>
-              <span>{{ child.title }}</span>
-            </el-menu-item>
-          </el-sub-menu>
-          <el-menu-item v-else :index="item.path" @click="navigate(item.path!)">
-            <el-icon><component :is="item.icon" /></el-icon>
-            <span>{{ item.title }}</span>
-          </el-menu-item>
+              <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
+              <span v-if="!collapsed" class="nav-label">{{ item.title }}</span>
+              <el-icon v-if="!collapsed" class="nav-arrow" :class="{ open: isOpen(item.title) }">
+                <ArrowDown />
+              </el-icon>
+            </div>
+            <div v-show="!collapsed && isOpen(item.title)" class="nav-children">
+              <div
+                v-for="child in item.children"
+                :key="child.path"
+                class="nav-item nav-child"
+                :class="{ 'is-active': activeMenu === child.path }"
+                @click="navigate(child.path)"
+              >
+                <el-icon class="nav-icon"><component :is="child.icon" /></el-icon>
+                <span class="nav-label">{{ child.title }}</span>
+              </div>
+            </div>
+          </div>
         </template>
-      </el-menu>
-    </el-scrollbar>
+      </nav>
+    </div>
   </aside>
 </template>
 
@@ -86,8 +176,10 @@ function navigate(path: string) {
   background: linear-gradient(180deg, #1a2332 0%, #0f1419 100%);
   display: flex;
   flex-direction: column;
-  transition: width 0.25s;
+  transition: width 0.2s ease;
   flex-shrink: 0;
+  contain: layout style;
+  isolation: isolate;
 }
 
 .sidebar.collapsed {
@@ -101,6 +193,7 @@ function navigate(path: string) {
   padding: 0 16px;
   gap: 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
 }
 
 .logo-icon {
@@ -126,26 +219,100 @@ function navigate(path: string) {
 
 .menu-scroll {
   flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 8px 0;
 }
 
-.sidebar :deep(.el-menu) {
-  border-right: none;
+.nav-menu {
+  display: flex;
+  flex-direction: column;
 }
 
-.sidebar :deep(.el-menu-item.is-active) {
-  background: rgba(64, 158, 255, 0.2) !important;
-  border-radius: 6px;
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 12px;
   margin: 2px 8px;
-  width: calc(100% - 16px);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  user-select: none;
 }
 
-.sidebar :deep(.el-sub-menu .el-menu-item) {
-  padding-left: 48px !important;
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 0;
+  margin: 2px 8px;
 }
 
-.sidebar :deep(.el-sub-menu__title:hover),
-.sidebar :deep(.el-menu-item:hover) {
-  background: rgba(255, 255, 255, 0.06) !important;
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.nav-item.is-active {
+  background: rgba(64, 158, 255, 0.2);
+  color: #fff;
+}
+
+.nav-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.nav-label {
+  flex: 1;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-group-title {
+  position: relative;
+}
+
+.nav-arrow {
+  font-size: 12px;
+  flex-shrink: 0;
+  transition: none;
+}
+
+.nav-arrow.open {
+  transform: rotate(180deg);
+}
+
+.nav-children .nav-child {
+  padding-left: 40px;
+  height: 40px;
+}
+</style>
+
+<style>
+.sidebar-submenu-popper {
+  padding: 4px 0 !important;
+}
+
+.sidebar-submenu-popper .popover-menu {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-submenu-popper .popover-item {
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  color: #303133;
+}
+
+.sidebar-submenu-popper .popover-item:hover {
+  background: #f5f7fa;
+}
+
+.sidebar-submenu-popper .popover-item.is-active {
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
 }
 </style>

@@ -1,0 +1,61 @@
+# 完整配置参考（storage 段已合并 local / minio，改 driver 即可切换）
+#
+# 注意：默认启动读 configs/config.yaml，本文件仅作参考。
+# 使用本文件启动：./bin/productcore -config configs/config.minio.yaml
+# 或把 storage 段复制到 configs/config.yaml
+#
+# MinIO 启动：make docker-up
+# MinIO 控制台：http://127.0.0.1:9101  (minioadmin / minioadmin)
+#
+# 目录规则（local / minio 一致）：
+#   products/{商品ID}/main|album|detail|videos|specs|skus/...
+#   common/platform/logo/...
+# 文件名：{resource}_{timestamp}_{random6}.{ext}
+
+server:
+  port: 8090
+  mode: debug
+
+database:
+  driver: postgres
+  postgres_dsn: "host=127.0.0.1 user=productcore password=YOUR_PASSWORD dbname=productcore port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+
+redis:
+  enabled: true
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+  stream_key: "productcore:product:events"
+  cache_ttl: 300
+
+auth:
+  enabled: true
+  admin_token: "123456"
+
+storage:
+  driver: minio                 # local | minio（改此项切换存储）
+  prefix: "uploads"             # local/minio 统一目录前缀
+  # --- local 专用（driver: local 时生效）---
+  local_path: "./data/uploads"  # 本地内容根；或 ./data + prefix
+  # --- 对外访问 URL（浏览器/前端加载图片用，改 IP 后重启即可，已存 URL 会自动重写）---
+  # local:  http://localhost:8090/uploads
+  # minio:  http://192.168.3.41:9100/productcore
+  public_base_url: "http://192.168.3.41:9100/productcore"
+  # --- minio 专用（driver: minio 时生效；SDK 上传连接地址，可与 public_base_url 主机不同）---
+  minio:
+    endpoint: "192.168.3.41:9100"  # docker-compose S3 API 端口
+    access_key: "minioadmin"
+    secret_key: "minioadmin"
+    bucket: "productcore"
+    use_ssl: false
+    prefix: "uploads"           # bucket 内根目录（可与上方 prefix 相同）
+    public_read: true           # 启动时自动设置 bucket 匿名读
+  # URL 示例（minio）：
+  #   http://127.0.0.1:9100/productcore/uploads/products/123/main/main_1710000000_a1b2c3.jpg
+  # URL 示例（local，driver 改 local 且 public_base_url 改 localhost:8090/uploads）：
+  #   http://localhost:8090/uploads/products/123/main/main_1710000000_a1b2c3.jpg
+
+cors:
+  allow_origins:
+    - "http://localhost:5173"
+    - "http://127.0.0.1:5173"

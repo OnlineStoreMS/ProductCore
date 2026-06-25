@@ -1,14 +1,21 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Expand, Fold, Search, Bell } from '@element-plus/icons-vue'
+import { Expand, Fold, User } from '@element-plus/icons-vue'
 import Sidebar from './Sidebar.vue'
+import SuperSearchPanel from '../components/search/SuperSearchPanel.vue'
 
 const route = useRoute()
 const collapsed = ref(false)
 
 const breadcrumbs = computed(() => {
   const title = (route.meta.title as string) || 'ProductCore'
+  if (route.path === '/products/drafts') {
+    return ['商品管理', '商品草稿箱']
+  }
+  if (route.path === '/products/trash') {
+    return ['商品管理', '商品回收站']
+  }
   if (route.path.startsWith('/products') && route.params.id) {
     return ['商品管理', '编辑商品']
   }
@@ -37,11 +44,8 @@ const breadcrumbs = computed(() => {
           </el-breadcrumb>
         </div>
         <div class="header-right">
-          <el-input placeholder="搜索商品 / SKU / 货号" :prefix-icon="Search" class="search-input" clearable />
-          <el-badge :value="3" class="notice-badge">
-            <el-button :icon="Bell" circle />
-          </el-badge>
-          <el-avatar :size="32" src="https://api.dicebear.com/7.x/avataaars/svg?seed=admin" />
+          <SuperSearchPanel />
+          <el-avatar :size="32" :icon="User" />
         </div>
       </header>
       <main class="content">
@@ -87,10 +91,6 @@ const breadcrumbs = computed(() => {
   display: flex;
   align-items: center;
   gap: 16px;
-}
-
-.search-input {
-  width: 260px;
 }
 
 .content {

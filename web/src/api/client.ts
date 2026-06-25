@@ -20,8 +20,16 @@ const client: AxiosInstance = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
+const adminToken = import.meta.env.VITE_ADMIN_TOKEN as string | undefined
+if (adminToken) {
+  client.defaults.headers.common.Authorization = `Bearer ${adminToken}`
+}
+
 client.interceptors.response.use(
   (res) => {
+    if (res.config.responseType === 'blob') {
+      return res
+    }
     const body = res.data as ApiResponse
     if (body.code !== 200) {
       return Promise.reject(new Error(body.message || '请求失败'))
@@ -36,3 +44,18 @@ export function unwrap<T>(res: { data: ApiResponse<T> }): T {
 }
 
 export default client
+
+export function parseContentDispositionFilename(header?: string): string | undefined {
+  if (!header) return undefined
+  const star = header.match(/filename\*=UTF-8''([^;\n]+)/i)
+  if (star?.[1]) {
+    try {
+      return decodeURIComponent(star[1])
+    } catch {
+      /* ignore */
+    }
+  }
+  const quoted = header.match(/filename="([^"]+)"/)
+  if (quoted?.[1]) return quoted[1]
+  return undefined
+}

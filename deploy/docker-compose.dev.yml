@@ -1,17 +1,22 @@
-# 本地开发依赖（MySQL + Redis，对齐 TECH_STACK 选型）
+# 本地开发依赖（PostgreSQL 16 + Redis，对齐 TECH_STACK 选型）
 
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: productcore-mysql
+  postgres:
+    image: postgres:16-alpine
+    container_name: productcore-postgres
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: productcore
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: productcore
     ports:
-      - "3307:3306"
+      - "5433:5432"
     volumes:
-      - productcore_mysql:/var/lib/mysql
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+      - productcore_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d productcore"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -19,5 +24,20 @@ services:
     ports:
       - "6380:6379"
 
+  minio:
+    image: bitnami/minio:2023.7.18-debian-11-r0
+    container_name: productcore-minio
+    # command: server /data --console-address ":9001"
+    environment:
+      - "MINIO_BROWSER=on"
+      - "MINIO_ROOT_USER=minioadmin"
+      - "MINIO_ROOT_PASSWORD=minioadmin"
+      - "MINIO_DEFAULT_BUCKETS=productcore"
+    ports:
+      - "9100:9000"   # S3 API
+      - "9101:9001"   # Web Console
+    volumes:
+      - /data/productcore/minio/data:/data
+
 volumes:
-  productcore_mysql:
+  productcore_pg:

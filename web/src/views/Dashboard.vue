@@ -66,7 +66,7 @@ onMounted(async () => {
                   <el-image :src="row.pic" class="thumb" fit="cover" />
                   <div>
                     <div class="name">{{ row.name }}</div>
-                    <div class="sn">{{ row.productSn }}</div>
+                    <div class="sn">货号：{{ row.productSn }}</div>
                   </div>
                 </div>
               </template>

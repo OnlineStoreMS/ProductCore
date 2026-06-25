@@ -5,10 +5,28 @@
 //	@description	多平台电商商品底库（PIM）REST API
 //	@BasePath		/api/v1
 //
-//	@tag.name		admin
-//	@tag.description	管理后台 API（CRUD）
+//	@securityDefinitions.apikey	BearerAuth
+//	@in							header
+//	@name						Authorization
+//	@description				管理端鉴权，格式: Bearer {admin_token}
 //
-//	@tag.name		open
+//	@tag.name		admin-商品
+//	@tag.description	商品 CRUD、草稿箱、回收站、铺货
+//	@tag.name		admin-品牌
+//	@tag.description	品牌管理
+//	@tag.name		admin-分类
+//	@tag.description	商品分类
+//	@tag.name		admin-分组
+//	@tag.description	商品分组
+//	@tag.name		admin-上传
+//	@tag.description	图片/视频上传
+//	@tag.name		admin-导入
+//	@tag.description	Zip 包导入商品
+//	@tag.name		admin-平台类型
+//	@tag.description	电商平台类型
+//	@tag.name		admin-平台店铺
+//	@tag.description	平台店铺与铺货
+//	@tag.name		open-商品
 //	@tag.description	对外 Open API（只读，已上架商品）
 package main
 
@@ -18,14 +36,18 @@ import (
 	"log"
 	"path/filepath"
 
+	_ "productcore/docs/swagger"
+	"productcore/internal/cache"
 	"productcore/internal/config"
 	"productcore/internal/database"
 	"productcore/internal/router"
 	"productcore/internal/seed"
+	"productcore/internal/storage"
 )
 
 func main() {
 	configPath := flag.String("config", "configs/config.yaml", "config file path")
+	forceSeed := flag.Bool("seed", false, "force re-seed demo data (truncate and reload)")
 	flag.Parse()
 
 	absConfig, err := filepath.Abs(*configPath)
@@ -45,13 +67,50 @@ func main() {
 	if err := database.AutoMigrate(db); err != nil {
 		log.Fatal(err)
 	}
-	seed.Run(db)
+	log.Printf("database connected: driver=%s", cfg.Database.Driver)
 
-	engine := router.Setup(db, cfg)
+	rdb, err := cache.NewRedis(&cfg.Redis)
+	if err != nil {
+		log.Printf("redis disabled: %v", err)
+	}
+
+	store, err := storage.New(&cfg.Storage)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("storage: driver=%s", cfg.Storage.Driver)
+	if cfg.Storage.Driver == "minio" {
+		log.Printf("  minio endpoint=%s bucket=%s prefix=%s public_read=%v public_base=%s",
+			cfg.Storage.MinIO.Endpoint,
+			cfg.Storage.MinIO.Bucket,
+			cfg.Storage.EffectivePrefix(),
+			cfg.Storage.MinIO.PublicRead,
+			cfg.Storage.PublicBaseURL,
+		)
+	} else {
+		log.Printf("  local dir=%s prefix=%s public_base=%s",
+			cfg.Storage.LocalContentDir(),
+			cfg.Storage.EffectivePrefix(),
+			cfg.Storage.PublicBaseURL,
+		)
+	}
+
+	if *forceSeed {
+		if err := seed.Force(db); err != nil {
+			log.Fatal(err)
+		}
+		log.Println("seed completed")
+	} else {
+		seed.Run(db)
+	}
+	seed.SeedPlatformTypes(db)
+
+	engine := router.Setup(db, cfg, rdb, store)
 	addr := fmt.Sprintf(":%d", cfg.Server.Port)
 	log.Printf("ProductCore API listening on http://localhost%s", addr)
 	log.Printf("  admin API: /api/v1/admin/*")
 	log.Printf("  open  API: /api/v1/open/*")
+	log.Printf("  swagger:   http://localhost%s/swagger/index.html", addr)
 	if err := engine.Run(addr); err != nil {
 		log.Fatal(err)
 	}

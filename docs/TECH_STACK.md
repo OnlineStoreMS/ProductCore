@@ -14,7 +14,7 @@ ProductCore 是**多平台电商商品底库**（PIM - Product Information Manag
 |------|------|------|
 | Web 框架 | **Gin** | 生态成熟、性能好、学习成本低，REST API 开发效率高 |
 | ORM | **GORM** | 与 mall 类似的关系型模型（SPU/SKU/分类/品牌）迁移友好 |
-| 数据库 | **PostgreSQL**（或 MySQL） | 商品 JSON 属性、全文检索扩展能力强 |
+| 数据库 | **PostgreSQL 16**（生产）/ SQLite（无 Docker 时可选） | 商品 JSON 属性、全文检索扩展能力强 |
 | 缓存 | **Redis** | 商品缓存、分布式锁、后续消息队列辅助 |
 | API 文档 | **swaggo/swag** | 自动生成 OpenAPI，便于对外 API 对接 |
 | 配置 | **Viper** | 多环境配置管理 |
@@ -70,8 +70,110 @@ ProductCore/
 ```bash
 make build && ./bin/productcore -config configs/config.yaml
 cd web && npm run dev
-make docker-up   # MySQL:3307 + Redis:6380
+make docker-up   # PostgreSQL:5433 + Redis:6380
 ```
+
+### 数据库配置（PostgreSQL 16）
+
+**1. 创建数据库（仅首次）**
+
+```bash
+psql -U postgres -f deploy/init_postgres.sql
+# 或：createdb -U postgres productcore
+```
+
+**2. 配置连接**
+
+编辑 `configs/config.yaml` 中的 `postgres_dsn`（用户名、密码按本地实际填写）：
+
+```yaml
+database:
+  driver: postgres
+  postgres_dsn: "host=127.0.0.1 user=postgres password=YOUR_PASSWORD dbname=productcore port=5432 sslmode=disable TimeZone=Asia/Shanghai"
+```
+
+**3. 启动服务** — 自动建表（GORM AutoMigrate）并在空库时写入演示数据（seed）
+
+```bash
+make build && ./bin/productcore -config configs/config.yaml
+```
+
+无 PostgreSQL 时可改用 SQLite：`driver: sqlite`
+
+---
+
+## Phase 1 能力（已实现）
+
+| 能力 | 状态 | 说明 |
+|------|------|------|
+| Redis 商品缓存 | ✅ | `redis.enabled: true` 后生效，Get 商品详情缓存 TTL 可配 |
+| 图片上传 | ✅ | 默认 `local` 存 `./data/uploads`；可切 `minio` |
+| Swagger | ✅ | http://localhost:8090/swagger/index.html ，`make swag` 可重新生成；`make build` 自动执行 |
+
+**Swagger 维护**：所有 `admin/`、`api/` handler 须带 swag 注解（见 `.cursor/rules/swagger-api.mdc`）。新增接口后执行 `make swag`，或 `scripts/check_swag.sh` 校验 handler 与 `@Router` 数量一致。
+| Admin 鉴权 | ✅ | `auth.enabled: true` + `Authorization: Bearer <admin_token>` |
+| 商品变更事件 | ✅ | Redis Stream `productcore:product:events`（需 redis.enabled） |
+| WangEditor 详情 | ✅ | 商品编辑页「商品详情」Tab |
+
+### 启用 Redis + 事件
+
+```yaml
+redis:
+  enabled: true
+  addr: "127.0.0.1:6380"
+```
+
+```bash
+make docker-up   # 启动 Redis:6380、MinIO API:9100、控制台:9101
+```
+
+### 启用 MinIO 存储
+
+```bash
+make docker-up   # 或 docker compose -f deploy/docker-compose.dev.yml up -d minio
+```
+
+修改 `configs/config.yaml`（或参考 `configs/config.minio.yaml`）：
+
+```yaml
+storage:
+  driver: minio
+  public_base_url: "http://127.0.0.1:9100/productcore"
+  minio:
+    endpoint: "127.0.0.1:9100"
+    access_key: "minioadmin"
+    secret_key: "minioadmin"
+    bucket: "productcore"
+    use_ssl: false
+    prefix: "uploads"       # bucket 内根目录
+    public_read: true         # 启动时自动设置 bucket 匿名读（商品图外链）
+```
+
+- **MinIO 控制台**：http://127.0.0.1:9101（`minioadmin` / `minioadmin`）
+- **对象路径**：`uploads/images/`、`uploads/videos/`、`uploads/files/`（按文件类型自动分类）
+- **返回 URL 示例**：`http://127.0.0.1:9100/productcore/uploads/products/123/main/main_1710000000_a1b2c3.jpg`
+- 上传接口不变：`POST /api/v1/admin/upload`、`/upload/batch`、`/upload/video`
+- 表单字段（可选）：`productId`（商品资源必填）、`skuId`、`resource`、`scope`
+- **路径层级**（local 在 `./data/uploads/` 下，minio 在 `uploads/` 前缀下，**规则完全一致**）：
+  - `products/{商品ID}/main/` — 主图
+  - `products/{商品ID}/album/`、`pics34/`、`detail/`
+  - `products/{商品ID}/materials/white/` 等素材
+  - `products/{商品ID}/videos/ratio11/` 等视频
+  - `products/{商品ID}/specs/` — 规格图
+  - `products/{商品ID}/skus/{skuId}/pic/` — SKU 图（传 skuId 时）
+  - `common/platform/logo/` — 平台类型 Logo 等
+- 新建商品：进入添加页时先调用 `POST /products/draft` 分配商品 ID，再按 ID 上传资源
+- 文件名重命名：`{resource}_{timestamp}_{random6}.{ext}`
+
+### 启用 Admin 鉴权
+
+```yaml
+auth:
+  enabled: true
+  admin_token: "your-secret-token"
+```
+
+前端 `.env`：`VITE_ADMIN_TOKEN=your-secret-token`
 
 ### 核心数据模型（参考 mall，面向多平台扩展）
 
