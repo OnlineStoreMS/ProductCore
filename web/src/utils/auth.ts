@@ -1,5 +1,6 @@
+import { getPortalUrl } from './runtimeConfig'
+
 const TOKEN_KEY = 'uc_access_token'
-const PORTAL_URL = import.meta.env.VITE_PORTAL_URL || 'http://localhost:5174'
 
 let sessionVerified = false
 
@@ -47,15 +48,15 @@ export function trustFreshToken() {
 }
 
 export function redirectToPortal() {
-  window.location.href = `${PORTAL_URL}/login`
+  window.location.href = `${getPortalUrl()}/login`
 }
 
 export function portalAppsUrl() {
-  return `${PORTAL_URL}/apps`
+  return `${getPortalUrl()}/apps`
 }
 
 export function portalLoginUrl() {
-  return `${PORTAL_URL}/login`
+  return `${getPortalUrl()}/login`
 }
 
 /** 向 UserCore 校验 JWT 是否仍有效（过期/篡改会失败） */

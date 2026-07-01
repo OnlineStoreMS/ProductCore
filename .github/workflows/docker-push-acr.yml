@@ -1,6 +1,6 @@
 # 构建 productcore-api / productcore-web 并推送到阿里云 ACR
 # Organization Secrets: ALIYUN_ACR_REGISTRY, ALIYUN_ACR_NAMESPACE, ALIYUN_ACR_USER, ALIYUN_ACR_PASSWORD
-# Organization Variables（可选）: VITE_PORTAL_URL
+# Organization Variables（可选）: 无（门户地址在部署时通过环境变量注入）
 
 name: Docker Build & Push (Aliyun ACR)
 
@@ -21,9 +21,6 @@ on:
 concurrency:
   group: docker-acr-${{ github.ref }}
   cancel-in-progress: true
-
-env:
-  VITE_PORTAL_URL: ${{ vars.VITE_PORTAL_URL || 'http://localhost:5174' }}
 
 jobs:
   prepare:
@@ -103,8 +100,6 @@ jobs:
           tags: |
             ${{ secrets.ALIYUN_ACR_REGISTRY }}/${{ secrets.ALIYUN_ACR_NAMESPACE }}/${{ matrix.item.id }}:${{ needs.prepare.outputs.tag }}
             ${{ secrets.ALIYUN_ACR_REGISTRY }}/${{ secrets.ALIYUN_ACR_NAMESPACE }}/${{ matrix.item.id }}:latest
-          build-args: |
-            VITE_PORTAL_URL=${{ env.VITE_PORTAL_URL }}
           cache-from: type=gha,scope=${{ matrix.item.id }}
           cache-to: type=gha,mode=max,scope=${{ matrix.item.id }}
 
