@@ -7,6 +7,8 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . ./
+RUN go install github.com/swaggo/swag/cmd/swag@v1.16.6
+RUN swag init -g main.go -o docs/swagger --parseInternal --dir cmd/api,admin,api,internal/pkg/response,internal/dto
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api
 
 FROM alpine:3.20

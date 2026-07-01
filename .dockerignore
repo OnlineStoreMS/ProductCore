@@ -1,6 +1,8 @@
-node_modules
+**/node_modules
 web/dist
 web/node_modules
+scripts/douyin
+screenshot
 bin
 .git
 .tmp
@@ -10,4 +12,5 @@ data
 .idea
 .vscode
 *.md
-docs
+docs/VMS_PMS_DESIGN.md
+docs/ROADMAP.md
