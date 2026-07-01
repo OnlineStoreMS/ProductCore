@@ -23,7 +23,7 @@ func (r *ProductRepo) ListDraftEntries(q dto.ProductQuery) ([]DraftListEntry, in
 		q.PageSize = 10
 	}
 
-	tx := r.db.Model(&model.Product{}).
+	tx := r.db.Scopes(scopeTenant(r.tenantID)).Model(&model.Product{}).
 		Joins("LEFT JOIN product_edit_drafts ed ON ed.product_id = products.id AND products.is_draft = 0").
 		Where("products.is_draft = 1 OR ed.id IS NOT NULL")
 	tx = applyKeywordFilter(tx, q.Keyword)

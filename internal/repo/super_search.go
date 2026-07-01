@@ -23,7 +23,7 @@ type SkuSearchRow struct {
 	PublishStatus  int8
 }
 
-func (r *ProductRepo) SearchSkus(keyword string, page, pageSize int) ([]SkuSearchRow, int64, error) {
+func (r *ProductRepo) searchSkus(keyword string, page, pageSize int) ([]SkuSearchRow, int64, error) {
 	keyword = strings.TrimSpace(keyword)
 	if keyword == "" {
 		return nil, 0, nil
@@ -41,7 +41,7 @@ func (r *ProductRepo) SearchSkus(keyword string, page, pageSize int) ([]SkuSearc
 	kw := "%" + keyword + "%"
 	base := r.db.Table("product_skus AS s").
 		Joins("JOIN products p ON p.id = s.product_id AND p.deleted_at IS NULL AND p.is_draft = 0").
-		Where("s.deleted_at IS NULL")
+		Where("s.deleted_at IS NULL AND s.tenant_id = ? AND p.tenant_id = ?", normalizeTenantID(r.tenantID), normalizeTenantID(r.tenantID))
 
 	whereSQL := `(s.sku_code LIKE ? OR s.spec_data LIKE ? OR p.name LIKE ? OR p.product_sn LIKE ? OR p.material_code LIKE ? OR p.source LIKE ? OR p.sku_specs_json LIKE ?`
 	args := []interface{}{kw, kw, kw, kw, kw, kw, kw}
@@ -68,4 +68,8 @@ func (r *ProductRepo) SearchSkus(keyword string, page, pageSize int) ([]SkuSearc
 		Limit(pageSize).
 		Scan(&rows).Error
 	return rows, total, err
+}
+
+func (r *ProductRepo) SearchSkus(keyword string, page, pageSize int) ([]SkuSearchRow, int64, error) {
+	return r.WithTenant(r.tenantID).searchSkus(keyword, page, pageSize)
 }

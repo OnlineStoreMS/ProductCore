@@ -37,8 +37,8 @@ type RedisConfig struct {
 }
 
 type AuthConfig struct {
-	Enabled    bool
-	AdminToken string `mapstructure:"admin_token"`
+	Enabled   bool
+	JWTSecret string `mapstructure:"jwt_secret"`
 }
 
 type StorageConfig struct {
@@ -60,7 +60,7 @@ type MinIOConfig struct {
 }
 
 type CORSConfig struct {
-	AllowOrigins []string
+	AllowOrigins []string `mapstructure:"allow_origins"`
 }
 
 func Load(path string) (*Config, error) {
@@ -108,8 +108,8 @@ func Load(path string) (*Config, error) {
 	if !v.IsSet("storage.minio.public_read") {
 		cfg.Storage.MinIO.PublicRead = true
 	}
-	if cfg.Auth.AdminToken == "" {
-		cfg.Auth.AdminToken = "dev-admin-token"
+	if cfg.Auth.JWTSecret == "" {
+		cfg.Auth.JWTSecret = "change-me-in-production-use-long-random-string"
 	}
 	return &cfg, nil
 }

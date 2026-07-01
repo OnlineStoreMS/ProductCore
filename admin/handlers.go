@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"productcore/internal/dto"
+	"productcore/internal/pkg/authcontext"
 	"productcore/internal/pkg/httputil"
 	"productcore/internal/pkg/response"
 	"productcore/internal/service"
@@ -19,6 +20,14 @@ type ProductHandler struct {
 
 func NewProductHandler(svc *service.ProductService, listingSvc *service.PlatformListingService) *ProductHandler {
 	return &ProductHandler{svc: svc, listingSvc: listingSvc}
+}
+
+func (h *ProductHandler) ps(c *gin.Context) *service.ProductService {
+	return h.svc.ForTenant(authcontext.TenantID(c))
+}
+
+func (h *ProductHandler) ls(c *gin.Context) *service.PlatformListingService {
+	return h.listingSvc.ForTenant(authcontext.TenantID(c))
 }
 
 // List godoc
@@ -45,12 +54,12 @@ func (h *ProductHandler) List(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	list, total, err := h.svc.List(q)
+	list, total, err := h.ps(c).List(q)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := h.listingSvc.AttachListedShops(list); err != nil {
+	if err := h.ls(c).AttachListedShops(list); err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -79,7 +88,7 @@ func (h *ProductHandler) SuperSearch(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "请输入搜索关键字")
 		return
 	}
-	list, total, err := h.svc.SuperSearch(q)
+	list, total, err := h.ps(c).SuperSearch(q)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
@@ -104,7 +113,7 @@ func (h *ProductHandler) Get(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid id")
 		return
 	}
-	item, err := h.svc.Get(id)
+	item, err := h.ps(c).Get(id)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
@@ -129,7 +138,7 @@ func (h *ProductHandler) Create(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	item, err := h.svc.Create(&in)
+	item, err := h.ps(c).Create(&in)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
@@ -148,7 +157,7 @@ func (h *ProductHandler) Create(c *gin.Context) {
 //	@Failure		500	{object}	response.Body
 //	@Router			/admin/products/draft [post]
 func (h *ProductHandler) CreateDraft(c *gin.Context) {
-	item, err := h.svc.CreateDraft()
+	item, err := h.ps(c).CreateDraft()
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
@@ -180,7 +189,7 @@ func (h *ProductHandler) Update(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	item, err := h.svc.Update(id, &in)
+	item, err := h.ps(c).Update(id, &in)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
@@ -204,7 +213,7 @@ func (h *ProductHandler) Delete(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid id")
 		return
 	}
-	if err := h.svc.Delete(id); err != nil {
+	if err := h.ps(c).Delete(id); err != nil {
 		httputil.HandleServiceError(c, err)
 		return
 	}
@@ -229,7 +238,7 @@ func (h *ProductHandler) BatchDelete(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	success, failed := h.svc.BatchDelete(body.IDs)
+	success, failed := h.ps(c).BatchDelete(body.IDs)
 	response.OK(c, dto.BatchResult{Success: success, Failed: failed})
 }
 
@@ -250,7 +259,7 @@ func (h *ProductHandler) BatchRestore(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	success, failed := h.svc.BatchRestore(body.IDs)
+	success, failed := h.ps(c).BatchRestore(body.IDs)
 	response.OK(c, dto.BatchResult{Success: success, Failed: failed})
 }
 
@@ -271,7 +280,7 @@ func (h *ProductHandler) BatchForceDelete(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	success, failed := h.svc.BatchForceDelete(body.IDs)
+	success, failed := h.ps(c).BatchForceDelete(body.IDs)
 	response.OK(c, dto.BatchResult{Success: success, Failed: failed})
 }
 
@@ -294,7 +303,7 @@ func (h *ProductHandler) ListTrash(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	list, total, err := h.svc.ListTrash(q)
+	list, total, err := h.ps(c).ListTrash(q)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
@@ -319,7 +328,7 @@ func (h *ProductHandler) ListDrafts(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	list, total, err := h.svc.ListDrafts(q)
+	list, total, err := h.ps(c).ListDrafts(q)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
@@ -342,7 +351,7 @@ func (h *ProductHandler) Restore(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid id")
 		return
 	}
-	if err := h.svc.Restore(id); err != nil {
+	if err := h.ps(c).Restore(id); err != nil {
 		httputil.HandleServiceError(c, err)
 		return
 	}
@@ -364,7 +373,7 @@ func (h *ProductHandler) ForceDelete(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid id")
 		return
 	}
-	if err := h.svc.ForceDelete(id); err != nil {
+	if err := h.ps(c).ForceDelete(id); err != nil {
 		httputil.HandleServiceError(c, err)
 		return
 	}
@@ -388,7 +397,7 @@ func (h *ProductHandler) GetSkus(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid id")
 		return
 	}
-	item, err := h.svc.GetSkus(id)
+	item, err := h.ps(c).GetSkus(id)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
@@ -418,7 +427,7 @@ func (h *ProductHandler) UpdateSkus(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	item, err := h.svc.UpdateSkus(id, body.Skus, body.SkuSpecs)
+	item, err := h.ps(c).UpdateSkus(id, body.Skus, body.SkuSpecs)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
@@ -448,7 +457,7 @@ func (h *ProductHandler) UpdatePublishStatus(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := h.svc.UpdatePublishStatus(id, body.PublishStatus); err != nil {
+	if err := h.ps(c).UpdatePublishStatus(id, body.PublishStatus); err != nil {
 		httputil.HandleServiceError(c, err)
 		return
 	}
@@ -471,7 +480,7 @@ func (h *ProductHandler) DiscardEditDraft(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid id")
 		return
 	}
-	if err := h.svc.DiscardEditDraft(id); err != nil {
+	if err := h.ps(c).DiscardEditDraft(id); err != nil {
 		httputil.HandleServiceError(c, err)
 		return
 	}
@@ -493,7 +502,7 @@ func (h *ProductHandler) GetListings(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid id")
 		return
 	}
-	list, err := h.listingSvc.ListShopsByProduct(id)
+	list, err := h.ls(c).ListShopsByProduct(id)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
@@ -523,7 +532,7 @@ func (h *ProductHandler) SetListings(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	list, err := h.listingSvc.SetProductListings(id, in.ShopIDs)
+	list, err := h.ls(c).SetProductListings(id, in.ShopIDs)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
@@ -539,6 +548,10 @@ func NewBrandHandler(svc *service.BrandService) *BrandHandler {
 	return &BrandHandler{svc: svc}
 }
 
+func (h *BrandHandler) bs(c *gin.Context) *service.BrandService {
+	return h.svc.ForTenant(authcontext.TenantID(c))
+}
+
 // List godoc
 //
 //	@Summary		品牌列表
@@ -549,7 +562,7 @@ func NewBrandHandler(svc *service.BrandService) *BrandHandler {
 //	@Success		200		{object}	response.BrandListResp
 //	@Router			/admin/brands [get]
 func (h *BrandHandler) List(c *gin.Context) {
-	list, err := h.svc.List(c.Query("keyword"))
+	list, err := h.bs(c).List(c.Query("keyword"))
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
@@ -573,7 +586,7 @@ func (h *BrandHandler) Create(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	item, err := h.svc.Create(&in)
+	item, err := h.bs(c).Create(&in)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
@@ -603,7 +616,7 @@ func (h *BrandHandler) Update(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	item, err := h.svc.Update(id, &in)
+	item, err := h.bs(c).Update(id, &in)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
@@ -626,7 +639,7 @@ func (h *BrandHandler) Delete(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid id")
 		return
 	}
-	if err := h.svc.Delete(id); err != nil {
+	if err := h.bs(c).Delete(id); err != nil {
 		httputil.HandleServiceError(c, err)
 		return
 	}
@@ -641,6 +654,10 @@ func NewCategoryHandler(svc *service.CategoryService) *CategoryHandler {
 	return &CategoryHandler{svc: svc}
 }
 
+func (h *CategoryHandler) cs(c *gin.Context) *service.CategoryService {
+	return h.svc.ForTenant(authcontext.TenantID(c))
+}
+
 // Tree godoc
 //
 //	@Summary		分类树
@@ -650,7 +667,7 @@ func NewCategoryHandler(svc *service.CategoryService) *CategoryHandler {
 //	@Success		200	{object}	response.CategoryTreeResp
 //	@Router			/admin/categories/tree [get]
 func (h *CategoryHandler) Tree(c *gin.Context) {
-	tree, err := h.svc.Tree()
+	tree, err := h.cs(c).Tree()
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
@@ -674,7 +691,7 @@ func (h *CategoryHandler) Create(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	item, err := h.svc.Create(&in)
+	item, err := h.cs(c).Create(&in)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
@@ -704,7 +721,7 @@ func (h *CategoryHandler) Update(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	item, err := h.svc.Update(id, &in)
+	item, err := h.cs(c).Update(id, &in)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
@@ -727,7 +744,7 @@ func (h *CategoryHandler) Delete(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid id")
 		return
 	}
-	if err := h.svc.Delete(id); err != nil {
+	if err := h.cs(c).Delete(id); err != nil {
 		httputil.HandleServiceError(c, err)
 		return
 	}
@@ -742,6 +759,10 @@ func NewGroupHandler(svc *service.ProductGroupService) *GroupHandler {
 	return &GroupHandler{svc: svc}
 }
 
+func (h *GroupHandler) gs(c *gin.Context) *service.ProductGroupService {
+	return h.svc.ForTenant(authcontext.TenantID(c))
+}
+
 // List godoc
 //
 //	@Summary		商品分组列表
@@ -751,7 +772,7 @@ func NewGroupHandler(svc *service.ProductGroupService) *GroupHandler {
 //	@Success		200	{object}	response.ProductGroupListResp
 //	@Router			/admin/groups [get]
 func (h *GroupHandler) List(c *gin.Context) {
-	list, err := h.svc.List()
+	list, err := h.gs(c).List()
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
@@ -775,7 +796,7 @@ func (h *GroupHandler) Create(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	item, err := h.svc.Create(&in)
+	item, err := h.gs(c).Create(&in)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
@@ -805,7 +826,7 @@ func (h *GroupHandler) Update(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	item, err := h.svc.Update(id, &in)
+	item, err := h.gs(c).Update(id, &in)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
@@ -828,7 +849,7 @@ func (h *GroupHandler) Delete(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid id")
 		return
 	}
-	if err := h.svc.Delete(id); err != nil {
+	if err := h.gs(c).Delete(id); err != nil {
 		httputil.HandleServiceError(c, err)
 		return
 	}
@@ -850,7 +871,7 @@ func (h *GroupHandler) Products(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid id")
 		return
 	}
-	list, err := h.svc.ListProducts(id)
+	list, err := h.gs(c).ListProducts(id)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return

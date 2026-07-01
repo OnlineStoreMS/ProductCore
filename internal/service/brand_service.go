@@ -12,14 +12,21 @@ import (
 
 type BrandService struct {
 	repo *repo.BrandRepo
+	tenantID uint64
 }
 
 func NewBrandService(repos *repo.Repos) *BrandService {
-	return &BrandService{repo: repos.Brand}
+	return &BrandService{repo: repos.Brand, tenantID: 1}
+}
+
+func (s *BrandService) ForTenant(tenantID uint64) *BrandService {
+	cp := *s
+	cp.tenantID = repo.NormalizeTenantID(tenantID)
+	return &cp
 }
 
 func (s *BrandService) List(keyword string) ([]dto.BrandDTO, error) {
-	brands, err := s.repo.List(keyword)
+	brands, err := s.repo.List(s.tenantID, keyword)
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +38,7 @@ func (s *BrandService) List(keyword string) ([]dto.BrandDTO, error) {
 }
 
 func (s *BrandService) Create(in *dto.BrandDTO) (*dto.BrandDTO, error) {
-	b := model.Brand{
+	b := model.Brand{TenantID: s.tenantID, 
 		Name: in.Name, Logo: in.Logo, FirstLetter: in.FirstLetter,
 		Sort: in.Sort, ShowStatus: in.ShowStatus,
 	}
@@ -46,7 +53,7 @@ func (s *BrandService) Create(in *dto.BrandDTO) (*dto.BrandDTO, error) {
 }
 
 func (s *BrandService) Update(id uint64, in *dto.BrandDTO) (*dto.BrandDTO, error) {
-	b, err := s.repo.GetByID(id)
+	b, err := s.repo.GetByID(s.tenantID, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
@@ -65,7 +72,7 @@ func (s *BrandService) Update(id uint64, in *dto.BrandDTO) (*dto.BrandDTO, error
 }
 
 func (s *BrandService) Delete(id uint64) error {
-	if err := s.repo.Delete(id); err != nil {
+	if err := s.repo.Delete(s.tenantID, id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrNotFound
 		}
@@ -75,7 +82,7 @@ func (s *BrandService) Delete(id uint64) error {
 }
 
 func (s *BrandService) toDTO(b *model.Brand) dto.BrandDTO {
-	count, _ := s.repo.CountProducts(b.ID)
+	count, _ := s.repo.CountProducts(s.tenantID, b.ID)
 	return dto.BrandDTO{
 		ID: b.ID, Name: b.Name, Logo: b.Logo, FirstLetter: b.FirstLetter,
 		Sort: b.Sort, ShowStatus: b.ShowStatus, ProductCount: count,

@@ -8,7 +8,7 @@
 //	@securityDefinitions.apikey	BearerAuth
 //	@in							header
 //	@name						Authorization
-//	@description				管理端鉴权，格式: Bearer {admin_token}
+//	@description				管理端鉴权，格式: Bearer {UserCore JWT}
 //
 //	@tag.name		admin-商品
 //	@tag.description	商品 CRUD、草稿箱、回收站、铺货

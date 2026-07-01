@@ -56,6 +56,9 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := backfillSkuSortOrder(db); err != nil {
 		return err
 	}
+	if err := ensureTenantSchema(db); err != nil {
+		return err
+	}
 	return ensureProductSchema(db)
 }
 
@@ -68,13 +71,8 @@ func ensureProductSchema(db *gorm.DB) error {
 		if err := db.Exec(`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_draft SMALLINT NOT NULL DEFAULT 0`).Error; err != nil {
 			return err
 		}
-		return db.Exec(`
-			DROP INDEX IF EXISTS idx_products_material_code;
-			DROP INDEX IF EXISTS uni_products_material_code;
-			CREATE UNIQUE INDEX IF NOT EXISTS idx_products_material_code
-			  ON products (material_code)
-			  WHERE material_code IS NOT NULL AND material_code <> '';
-		`).Error
+		// 资料编码唯一索引由 ensureTenantSchema 按 (tenant_id, material_code) 维护
+		return nil
 	default:
 		return nil
 	}

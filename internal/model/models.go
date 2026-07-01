@@ -16,6 +16,7 @@ type BaseModel struct {
 // Brand 品牌
 type Brand struct {
 	BaseModel
+	TenantID     uint64 `gorm:"index;not null;default:1" json:"tenantId"`
 	Name         string `gorm:"size:64;not null" json:"name"`
 	Logo         string `gorm:"size:512" json:"logo"`
 	FirstLetter  string `gorm:"size:1" json:"firstLetter"`
@@ -29,6 +30,7 @@ func (Brand) TableName() string { return "brands" }
 // Category 商品分类（树形）
 type Category struct {
 	BaseModel
+	TenantID   uint64 `gorm:"index;not null;default:1" json:"tenantId"`
 	ParentID   uint64 `gorm:"default:0;index" json:"parentId"`
 	Name       string `gorm:"size:64;not null" json:"name"`
 	Level      int    `gorm:"default:0" json:"level"`
@@ -42,6 +44,7 @@ func (Category) TableName() string { return "categories" }
 // ProductGroup 商品分组
 type ProductGroup struct {
 	BaseModel
+	TenantID    uint64 `gorm:"index;not null;default:1" json:"tenantId"`
 	Name        string `gorm:"size:64;not null" json:"name"`
 	Description string `gorm:"size:512" json:"description"`
 	Sort        int    `gorm:"default:0" json:"sort"`
@@ -52,6 +55,7 @@ func (ProductGroup) TableName() string { return "product_groups" }
 // Product SPU 商品
 type Product struct {
 	BaseModel
+	TenantID       uint64  `gorm:"index;not null;default:1" json:"tenantId"`
 	Name           string  `gorm:"size:200;not null" json:"name"`
 	SubTitle       string  `gorm:"size:255" json:"subTitle"`
 	MaterialCode   string  `gorm:"size:64" json:"materialCode"` // 来源资料编码，选填，非空时唯一
@@ -89,8 +93,9 @@ func (Product) TableName() string { return "products" }
 // Sku SKU
 type Sku struct {
 	BaseModel
+	TenantID  uint64  `gorm:"index;not null;default:1" json:"tenantId"`
 	ProductID uint64  `gorm:"index;not null" json:"productId"`
-	SkuCode   string  `gorm:"size:64;uniqueIndex;not null" json:"skuCode"` // 全局唯一，仅 A-Za-z0-9
+	SkuCode   string  `gorm:"size:64;not null" json:"skuCode"` // 租户内唯一，仅 A-Za-z0-9
 	SpecData  string  `gorm:"type:text" json:"-"`                          // JSON: {"颜色":"红","尺码":"L"}
 	SortOrder int     `gorm:"default:0;index" json:"sortOrder"`            // 列表/导出序号，从 0 起
 	Price       float64 `gorm:"type:decimal(10,2);default:0" json:"price"`
@@ -130,6 +135,7 @@ func (PlatformShopType) TableName() string { return "platform_shop_types" }
 // PlatformShop 平台店铺
 type PlatformShop struct {
 	BaseModel
+	TenantID       uint64 `gorm:"index;not null;default:1" json:"tenantId"`
 	PlatformTypeID uint64 `gorm:"index;not null" json:"platformTypeId"`
 	Name           string `gorm:"size:128;not null" json:"name"`
 	SourceChannel  string `gorm:"size:32;not null" json:"sourceChannel"`
@@ -156,8 +162,9 @@ func (PlatformSkuMapping) TableName() string { return "platform_sku_mappings" }
 // PlatformListing 商品在各店铺的铺货记录（SPU 级）
 type PlatformListing struct {
 	BaseModel
-	ProductID      uint64 `gorm:"uniqueIndex:idx_product_shop;not null" json:"productId"`
-	PlatformShopID uint64 `gorm:"uniqueIndex:idx_product_shop;not null" json:"platformShopId"`
+	TenantID       uint64 `gorm:"index;not null;default:1" json:"tenantId"`
+	ProductID      uint64 `gorm:"uniqueIndex:idx_tenant_product_shop;not null" json:"productId"`
+	PlatformShopID uint64 `gorm:"uniqueIndex:idx_tenant_product_shop;not null" json:"platformShopId"`
 	ListingStatus  int8   `gorm:"default:1" json:"listingStatus"`
 	Remark         string `gorm:"size:256" json:"remark"`
 }

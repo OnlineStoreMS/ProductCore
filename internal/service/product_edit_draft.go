@@ -56,7 +56,7 @@ func (s *ProductService) loadEditDraftDTO(tx *repo.ProductRepo, productID uint64
 	d, err := tx.GetEditDraft(productID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			svc := &ProductService{repo: tx, meta: s.meta, store: s.store}
+			svc := s.withRepo(tx)
 			return svc.toDTO(p, true)
 		}
 		return nil, err
@@ -75,7 +75,7 @@ func (s *ProductService) loadEditDraftDTO(tx *repo.ProductRepo, productID uint64
 }
 
 func (s *ProductService) applyProductUpdate(tx *repo.ProductRepo, id uint64, in *dto.ProductDTO, isDraft int8) (*dto.ProductDTO, error) {
-	svc := &ProductService{repo: tx, meta: s.meta, store: s.store}
+	svc := s.withRepo(tx)
 	updated, err := svc.fromDTO(in)
 	if err != nil {
 		return nil, err
@@ -114,7 +114,7 @@ func (s *ProductService) applyProductUpdate(tx *repo.ProductRepo, id uint64, in 
 }
 
 func (s *ProductService) updateDraftBoxAutoSave(tx *repo.ProductRepo, id uint64, in *dto.ProductDTO) (*dto.ProductDTO, error) {
-	svc := &ProductService{repo: tx, meta: s.meta, store: s.store}
+	svc := s.withRepo(tx)
 	updated, err := svc.fromDTO(in)
 	if err != nil {
 		return nil, err

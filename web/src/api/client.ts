@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type { AxiosInstance } from 'axios'
+import { getToken, redirectToPortal, clearToken } from '../utils/auth'
 
 export interface ApiResponse<T = unknown> {
   code: number
@@ -20,10 +21,13 @@ const client: AxiosInstance = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-const adminToken = import.meta.env.VITE_ADMIN_TOKEN as string | undefined
-if (adminToken) {
-  client.defaults.headers.common.Authorization = `Bearer ${adminToken}`
-}
+client.interceptors.request.use((config) => {
+  const token = getToken()
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
 
 client.interceptors.response.use(
   (res) => {
@@ -36,7 +40,13 @@ client.interceptors.response.use(
     }
     return res
   },
-  (err) => Promise.reject(err),
+  (err) => {
+    if (err.response?.status === 401) {
+      clearToken()
+      redirectToPortal()
+    }
+    return Promise.reject(err)
+  },
 )
 
 export function unwrap<T>(res: { data: ApiResponse<T> }): T {

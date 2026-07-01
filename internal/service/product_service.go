@@ -20,15 +20,30 @@ import (
 )
 
 type ProductService struct {
-	repo   *repo.ProductRepo
-	meta   *repo.Repos
-	cache  *cache.ProductCache
-	events *event.Publisher
-	store  storage.Storage
+	repo     *repo.ProductRepo
+	meta     *repo.Repos
+	cache    *cache.ProductCache
+	events   *event.Publisher
+	store    storage.Storage
+	tenantID uint64
 }
 
 func NewProductService(repos *repo.Repos, pc *cache.ProductCache, pub *event.Publisher, store storage.Storage) *ProductService {
-	return &ProductService{repo: repos.Product, meta: repos, cache: pc, events: pub, store: store}
+	return &ProductService{repo: repos.Product, meta: repos, cache: pc, events: pub, store: store, tenantID: 1}
+}
+
+func (s *ProductService) ForTenant(tenantID uint64) *ProductService {
+	cp := *s
+	cp.tenantID = repo.NormalizeTenantID(tenantID)
+	cp.repo = s.repo.WithTenant(tenantID)
+	return &cp
+}
+
+func (s *ProductService) withRepo(tx *repo.ProductRepo) *ProductService {
+	return &ProductService{
+		repo: tx, meta: s.meta, cache: s.cache, events: s.events,
+		store: s.store, tenantID: s.tenantID,
+	}
 }
 
 func (s *ProductService) List(q dto.ProductQuery) ([]dto.ProductDTO, int64, error) {
@@ -113,7 +128,7 @@ func (s *ProductService) Create(in *dto.ProductDTO) (*dto.ProductDTO, error) {
 	}
 	var out *dto.ProductDTO
 	err := s.repo.Transaction(func(tx *repo.ProductRepo) error {
-		svc := &ProductService{repo: tx, meta: s.meta, store: s.store}
+		svc := s.withRepo(tx)
 		p, err := svc.fromDTO(in)
 		if err != nil {
 			return err
@@ -149,7 +164,7 @@ func (s *ProductService) Update(id uint64, in *dto.ProductDTO) (*dto.ProductDTO,
 	var out *dto.ProductDTO
 	var notifyChange bool
 	err := s.repo.Transaction(func(tx *repo.ProductRepo) error {
-		svc := &ProductService{repo: tx, meta: s.meta, store: s.store}
+		svc := s.withRepo(tx)
 		p, err := tx.GetByID(id)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -496,7 +511,7 @@ func (s *ProductService) UpdateSkus(id uint64, skus []dto.SkuDTO, skuSpecsIn []d
 	var out *dto.ProductSkusDTO
 	var publishStatus int8
 	err := s.repo.Transaction(func(tx *repo.ProductRepo) error {
-		svc := &ProductService{repo: tx, meta: s.meta, store: s.store}
+		svc := s.withRepo(tx)
 		p, err := tx.GetByID(id)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -592,6 +607,7 @@ func (s *ProductService) IDByMaterialCode(code string) (uint64, bool) {
 // CreateDraft 创建草稿商品（分配 ID，供新建页面上传资源，仅出现在草稿箱）
 func (s *ProductService) CreateDraft() (*dto.ProductDTO, error) {
 	p := &model.Product{
+		TenantID:       s.tenantID,
 		Name:           "未命名商品",
 		Unit:           "件",
 		IsDraft:        1,
@@ -732,6 +748,7 @@ func (s *ProductService) saveSkus(tx *repo.ProductRepo, productID uint64, skus [
 			return fmt.Errorf("%w: %s", ErrDuplicateSku, code)
 		}
 		sku := &model.Sku{
+			TenantID:  s.tenantID,
 			ProductID: productID,
 			SkuCode:   code,
 			SpecData:  util.ToJSON(item.Specs),
@@ -816,6 +833,7 @@ func (s *ProductService) fromDTO(in *dto.ProductDTO) (*model.Product, error) {
 		skuSpecsJSON = util.ToJSON(dto.CompactSkuSpecs(in.SkuSpecs))
 	}
 	return &model.Product{
+		TenantID: s.tenantID,
 		Name: in.Name, SubTitle: in.SubTitle,
 		MaterialCode: in.MaterialCode, Source: in.Source, ProductSn: in.ProductSn,
 		BrandID: in.BrandID, CategoryID: in.CategoryID, Pic: in.Pic,
@@ -835,7 +853,7 @@ func (s *ProductService) loadDTO(tx *repo.ProductRepo, id uint64) (*dto.ProductD
 	if err != nil {
 		return nil, err
 	}
-	svc := &ProductService{repo: tx, meta: s.meta, store: s.store}
+	svc := s.withRepo(tx)
 	return svc.toDTO(p, true)
 }
 

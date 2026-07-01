@@ -30,7 +30,7 @@ redis:
 
 auth:
   enabled: true
-  admin_token: "123456"
+  jwt_secret: "change-me-in-production-use-long-random-string"
 
 storage:
   driver: minio                 # local | minio（改此项切换存储）

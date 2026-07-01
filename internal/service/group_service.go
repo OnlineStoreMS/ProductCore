@@ -12,16 +12,17 @@ import (
 )
 
 type ProductGroupService struct {
-	repos   *repo.Repos
-	product *ProductService
+	repos    *repo.Repos
+	product  *ProductService
+	tenantID uint64
 }
 
 func NewProductGroupService(repos *repo.Repos, productSvc *ProductService) *ProductGroupService {
-	return &ProductGroupService{repos: repos, product: productSvc}
+	return &ProductGroupService{repos: repos, product: productSvc, tenantID: 1}
 }
 
 func (s *ProductGroupService) List() ([]dto.ProductGroupDTO, error) {
-	groups, err := s.repos.Group.List()
+	groups, err := s.repos.Group.List(s.tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +34,7 @@ func (s *ProductGroupService) List() ([]dto.ProductGroupDTO, error) {
 }
 
 func (s *ProductGroupService) Create(in *dto.ProductGroupDTO) (*dto.ProductGroupDTO, error) {
-	g := model.ProductGroup{Name: in.Name, Description: in.Description, Sort: in.Sort}
+	g := model.ProductGroup{TenantID: s.tenantID, Name: in.Name, Description: in.Description, Sort: in.Sort}
 	if err := s.repos.Group.Create(&g); err != nil {
 		return nil, err
 	}
@@ -42,7 +43,7 @@ func (s *ProductGroupService) Create(in *dto.ProductGroupDTO) (*dto.ProductGroup
 }
 
 func (s *ProductGroupService) Update(id uint64, in *dto.ProductGroupDTO) (*dto.ProductGroupDTO, error) {
-	g, err := s.repos.Group.GetByID(id)
+	g, err := s.repos.Group.GetByID(s.tenantID, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
@@ -58,7 +59,7 @@ func (s *ProductGroupService) Update(id uint64, in *dto.ProductGroupDTO) (*dto.P
 }
 
 func (s *ProductGroupService) Delete(id uint64) error {
-	if err := s.repos.Group.Delete(id); err != nil {
+	if err := s.repos.Group.Delete(s.tenantID, id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrNotFound
 		}
@@ -68,7 +69,7 @@ func (s *ProductGroupService) Delete(id uint64) error {
 }
 
 func (s *ProductGroupService) ListProducts(groupID uint64) ([]dto.ProductDTO, error) {
-	ids, err := s.repos.Group.ListProductIDs(groupID)
+	ids, err := s.repos.Group.ListProductIDs(s.tenantID, groupID)
 	if err != nil {
 		return nil, err
 	}
@@ -84,9 +85,17 @@ func (s *ProductGroupService) ListProducts(groupID uint64) ([]dto.ProductDTO, er
 }
 
 func (s *ProductGroupService) toDTO(g *model.ProductGroup) dto.ProductGroupDTO {
-	count, _ := s.repos.Group.CountProducts(g.ID)
+	count, _ := s.repos.Group.CountProducts(s.tenantID, g.ID)
 	return dto.ProductGroupDTO{
 		ID: g.ID, Name: g.Name, Description: g.Description, Sort: g.Sort,
 		ProductCount: count, CreateTime: util.FormatTime(g.CreatedAt),
 	}
+}
+
+
+func (s *ProductGroupService) ForTenant(tenantID uint64) *ProductGroupService {
+	cp := *s
+	cp.tenantID = repo.NormalizeTenantID(tenantID)
+	cp.product = s.product.ForTenant(tenantID)
+	return &cp
 }

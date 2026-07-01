@@ -14,6 +14,7 @@ type PlatformListingService struct {
 	shopRepo   *repo.PlatformShopRepo
 	product    *repo.ProductRepo
 	productSvc *ProductService
+	tenantID   uint64
 }
 
 func NewPlatformListingService(repos *repo.Repos, productSvc *ProductService) *PlatformListingService {
@@ -22,7 +23,17 @@ func NewPlatformListingService(repos *repo.Repos, productSvc *ProductService) *P
 		shopRepo:   repos.PlatformShop,
 		product:    repos.Product,
 		productSvc: productSvc,
+		tenantID:   1,
 	}
+}
+
+func (s *PlatformListingService) ForTenant(tenantID uint64) *PlatformListingService {
+	cp := *s
+	cp.tenantID = repo.NormalizeTenantID(tenantID)
+	cp.product = s.product.WithTenant(tenantID)
+	cp.shopRepo = s.shopRepo.WithTenant(tenantID)
+	cp.productSvc = s.productSvc.ForTenant(tenantID)
+	return &cp
 }
 
 func (s *PlatformListingService) ListShopsByProduct(productID uint64) ([]dto.ListedShopDTO, error) {
@@ -61,7 +72,7 @@ func (s *PlatformListingService) SetProductListings(productID uint64, shopIDs []
 			return nil, err
 		}
 	}
-	if err := s.listing.ReplaceProductListings(productID, shopIDs); err != nil {
+	if err := s.listing.ReplaceProductListings(s.tenantID, productID, shopIDs); err != nil {
 		return nil, err
 	}
 	return s.ListShopsByProduct(productID)
@@ -82,7 +93,9 @@ func (s *PlatformListingService) AttachListedShops(list []dto.ProductDTO) error 
 	for i := range list {
 		shops := m[list[i].ID]
 		if shops == nil {
-			shops = []dto.ListedShopDTO{}
+			list[i].ListedShops = []dto.ListedShopDTO{}
+			list[i].ListedShopCount = 0
+			continue
 		}
 		list[i].ListedShops = shops
 		list[i].ListedShopCount = len(shops)
@@ -90,36 +103,24 @@ func (s *PlatformListingService) AttachListedShops(list []dto.ProductDTO) error 
 	return nil
 }
 
-func (s *PlatformListingService) ListProductsByShop(shopID uint64, q dto.ProductQuery) ([]dto.ProductDTO, int64, error) {
+func (s *PlatformListingService) ListProductsByShop(shopID uint64, keyword string, page, pageSize int) ([]dto.ProductDTO, int64, error) {
 	if _, err := s.shopRepo.GetByID(shopID); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, 0, ErrNotFound
 		}
 		return nil, 0, err
 	}
-	ids, total, err := s.listing.ListProductIDsByShop(shopID, q.Keyword, q.Page, q.PageSize)
+	ids, total, err := s.listing.ListProductIDsByShop(shopID, keyword, page, pageSize)
 	if err != nil {
 		return nil, 0, err
 	}
-	if len(ids) == 0 {
-		return []dto.ProductDTO{}, total, nil
-	}
 	out := make([]dto.ProductDTO, 0, len(ids))
 	for _, id := range ids {
-		p, err := s.product.GetByID(id)
-		if err != nil {
-			continue
-		}
-		item, err := s.productSvc.toDTO(p, false)
+		item, err := s.productSvc.Get(id)
 		if err != nil {
 			continue
 		}
 		out = append(out, *item)
 	}
-	_ = s.AttachListedShops(out)
 	return out, total, nil
-}
-
-func (s *PlatformListingService) ProductCountsByShopIDs(shopIDs []uint64) (map[uint64]int64, error) {
-	return s.listing.CountProductsByShopIDs(shopIDs)
 }

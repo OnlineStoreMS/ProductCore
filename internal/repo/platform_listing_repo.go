@@ -49,9 +49,9 @@ func (r *PlatformListingRepo) ShopsByProductIDs(productIDs []uint64) (map[uint64
 	return out, nil
 }
 
-func (r *PlatformListingRepo) ReplaceProductListings(productID uint64, shopIDs []uint64) error {
+func (r *PlatformListingRepo) ReplaceProductListings(tenantID, productID uint64, shopIDs []uint64) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Unscoped().Where("product_id = ?", productID).Delete(&model.PlatformListing{}).Error; err != nil {
+		if err := tx.Unscoped().Where("product_id = ? AND tenant_id = ?", productID, normalizeTenantID(tenantID)).Delete(&model.PlatformListing{}).Error; err != nil {
 			return err
 		}
 		if len(shopIDs) == 0 {
@@ -59,6 +59,7 @@ func (r *PlatformListingRepo) ReplaceProductListings(productID uint64, shopIDs [
 		}
 		seen := make(map[uint64]struct{}, len(shopIDs))
 		items := make([]model.PlatformListing, 0, len(shopIDs))
+		tid := normalizeTenantID(tenantID)
 		for _, sid := range shopIDs {
 			if sid == 0 {
 				continue
@@ -68,7 +69,7 @@ func (r *PlatformListingRepo) ReplaceProductListings(productID uint64, shopIDs [
 			}
 			seen[sid] = struct{}{}
 			items = append(items, model.PlatformListing{
-				ProductID: productID, PlatformShopID: sid, ListingStatus: 1,
+				TenantID: tid, ProductID: productID, PlatformShopID: sid, ListingStatus: 1,
 			})
 		}
 		if len(items) == 0 {

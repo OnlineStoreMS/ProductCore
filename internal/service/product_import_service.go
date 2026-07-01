@@ -32,6 +32,12 @@ func NewProductImportService(products *ProductService, store storage.Storage) *P
 	return &ProductImportService{products: products, store: store}
 }
 
+func (s *ProductImportService) ForTenant(tenantID uint64) *ProductImportService {
+	cp := *s
+	cp.products = s.products.ForTenant(tenantID)
+	return &cp
+}
+
 func (s *ProductImportService) ImportFromZip(form ProductImportInput, zipFile *multipart.FileHeader) (*dto.ProductDTO, error) {
 	name := strings.TrimSpace(form.Name)
 	if name == "" {

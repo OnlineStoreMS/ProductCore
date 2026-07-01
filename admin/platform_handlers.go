@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"productcore/internal/dto"
+	"productcore/internal/pkg/authcontext"
 	"productcore/internal/pkg/httputil"
 	"productcore/internal/pkg/response"
 	"productcore/internal/service"
@@ -139,6 +140,14 @@ func NewPlatformShopHandler(svc *service.PlatformShopService, listingSvc *servic
 	return &PlatformShopHandler{svc: svc, listingSvc: listingSvc}
 }
 
+func (h *PlatformShopHandler) shops(c *gin.Context) *service.PlatformShopService {
+	return h.svc.ForTenant(authcontext.TenantID(c))
+}
+
+func (h *PlatformShopHandler) listings(c *gin.Context) *service.PlatformListingService {
+	return h.listingSvc.ForTenant(authcontext.TenantID(c))
+}
+
 // List godoc
 //
 //	@Summary		平台店铺列表
@@ -158,7 +167,7 @@ func (h *PlatformShopHandler) List(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	list, total, err := h.svc.List(q)
+	list, total, err := h.shops(c).List(q)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
@@ -182,7 +191,7 @@ func (h *PlatformShopHandler) Create(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	item, err := h.svc.Create(&in)
+	item, err := h.shops(c).Create(&in)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
@@ -212,7 +221,7 @@ func (h *PlatformShopHandler) Update(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	item, err := h.svc.Update(id, &in)
+	item, err := h.shops(c).Update(id, &in)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
@@ -235,7 +244,7 @@ func (h *PlatformShopHandler) Delete(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid id")
 		return
 	}
-	if err := h.svc.Delete(id); err != nil {
+	if err := h.shops(c).Delete(id); err != nil {
 		httputil.HandleServiceError(c, err)
 		return
 	}
@@ -265,7 +274,7 @@ func (h *PlatformShopHandler) ListProducts(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	list, total, err := h.listingSvc.ListProductsByShop(id, q)
+	list, total, err := h.listings(c).ListProductsByShop(id, q.Keyword, q.Page, q.PageSize)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return

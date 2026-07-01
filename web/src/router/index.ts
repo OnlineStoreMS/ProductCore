@@ -1,9 +1,22 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AdminLayout from '../layouts/AdminLayout.vue'
+import { getToken, redirectToPortal, ensureSession, clearToken } from '../utils/auth'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    {
+      path: '/auth/callback',
+      name: 'AuthCallback',
+      component: () => import('../views/AuthCallback.vue'),
+      meta: { public: true },
+    },
+    {
+      path: '/auth/logout',
+      name: 'AuthLogout',
+      component: () => import('../views/AuthLogout.vue'),
+      meta: { public: true },
+    },
     {
       path: '/',
       component: AdminLayout,
@@ -23,6 +36,21 @@ const router = createRouter({
       ],
     },
   ],
+})
+
+router.beforeEach(async (to) => {
+  if (to.meta.public) return true
+  if (!getToken()) {
+    redirectToPortal()
+    return false
+  }
+  const ok = await ensureSession()
+  if (!ok) {
+    clearToken()
+    redirectToPortal()
+    return false
+  }
+  return true
 })
 
 export default router

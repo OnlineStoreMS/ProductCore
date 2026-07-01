@@ -16,6 +16,12 @@ func NewProductExportService(products *ProductService, store storage.Storage) *P
 	return &ProductExportService{products: products, store: store}
 }
 
+func (s *ProductExportService) ForTenant(tenantID uint64) *ProductExportService {
+	cp := *s
+	cp.products = s.products.ForTenant(tenantID)
+	return &cp
+}
+
 // ExportToZip 导出商品为 ProductCore 标准 zip 包
 func (s *ProductExportService) ExportToZip(productID uint64) (zipPath, downloadName string, cleanup func(), err error) {
 	cleanup = func() {}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"productcore/internal/pkg/authcontext"
 	"productcore/internal/pkg/httputil"
 	"productcore/internal/pkg/response"
 	"productcore/internal/service"
@@ -20,6 +21,14 @@ type ProductImportHandler struct {
 
 func NewProductImportHandler(importSvc *service.ProductImportService, exportSvc *service.ProductExportService) *ProductImportHandler {
 	return &ProductImportHandler{importSvc: importSvc, exportSvc: exportSvc}
+}
+
+func (h *ProductImportHandler) importFor(c *gin.Context) *service.ProductImportService {
+	return h.importSvc.ForTenant(authcontext.TenantID(c))
+}
+
+func (h *ProductImportHandler) exportFor(c *gin.Context) *service.ProductExportService {
+	return h.exportSvc.ForTenant(authcontext.TenantID(c))
 }
 
 // Import godoc
@@ -58,7 +67,7 @@ func (h *ProductImportHandler) Import(c *gin.Context) {
 		return
 	}
 
-	item, err := h.importSvc.ImportFromZip(service.ProductImportInput{
+	item, err := h.importFor(c).ImportFromZip(service.ProductImportInput{
 		Name:       form.Name,
 		SubTitle:   form.SubTitle,
 		BrandID:    form.BrandID,
@@ -89,7 +98,7 @@ func (h *ProductImportHandler) Export(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "invalid id")
 		return
 	}
-	zipPath, downloadName, cleanup, err := h.exportSvc.ExportToZip(id)
+	zipPath, downloadName, cleanup, err := h.exportFor(c).ExportToZip(id)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return

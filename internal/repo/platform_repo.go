@@ -61,9 +61,18 @@ func (r *PlatformTypeRepo) CountShops(typeID uint64) (int64, error) {
 	return n, err
 }
 
-type PlatformShopRepo struct{ db *gorm.DB }
+type PlatformShopRepo struct {
+	db       *gorm.DB
+	tenantID uint64
+}
 
-func NewPlatformShopRepo(db *gorm.DB) *PlatformShopRepo { return &PlatformShopRepo{db: db} }
+func NewPlatformShopRepo(db *gorm.DB) *PlatformShopRepo {
+	return &PlatformShopRepo{db: db, tenantID: 1}
+}
+
+func (r *PlatformShopRepo) WithTenant(tenantID uint64) *PlatformShopRepo {
+	return &PlatformShopRepo{db: r.db, tenantID: normalizeTenantID(tenantID)}
+}
 
 func (r *PlatformShopRepo) List(q dto.PlatformShopQuery) ([]model.PlatformShop, int64, error) {
 	if q.Page <= 0 {
@@ -72,7 +81,7 @@ func (r *PlatformShopRepo) List(q dto.PlatformShopQuery) ([]model.PlatformShop, 
 	if q.PageSize <= 0 {
 		q.PageSize = 10
 	}
-	tx := r.db.Model(&model.PlatformShop{})
+	tx := r.db.Scopes(scopeTenant(r.tenantID)).Model(&model.PlatformShop{})
 	if q.Keyword != "" {
 		kw := "%" + q.Keyword + "%"
 		tx = tx.Where("name LIKE ? OR shop_code LIKE ? OR external_shop_id LIKE ?", kw, kw, kw)
@@ -95,7 +104,7 @@ func (r *PlatformShopRepo) List(q dto.PlatformShopQuery) ([]model.PlatformShop, 
 
 func (r *PlatformShopRepo) GetByID(id uint64) (*model.PlatformShop, error) {
 	var item model.PlatformShop
-	if err := r.db.First(&item, id).Error; err != nil {
+	if err := r.db.Scopes(scopeTenant(r.tenantID)).First(&item, id).Error; err != nil {
 		return nil, err
 	}
 	return &item, nil
@@ -106,7 +115,7 @@ func (r *PlatformShopRepo) Create(item *model.PlatformShop) error { return r.db.
 func (r *PlatformShopRepo) Save(item *model.PlatformShop) error { return r.db.Save(item).Error }
 
 func (r *PlatformShopRepo) Delete(id uint64) error {
-	res := r.db.Delete(&model.PlatformShop{}, id)
+	res := r.db.Scopes(scopeTenant(r.tenantID)).Delete(&model.PlatformShop{}, id)
 	if res.Error != nil {
 		return res.Error
 	}

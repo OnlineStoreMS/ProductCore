@@ -7,6 +7,7 @@ import (
 	"productcore/internal/cache"
 	"productcore/internal/config"
 	"productcore/internal/event"
+	jwtmgr "productcore/internal/pkg/jwt"
 	"productcore/internal/repo"
 	"productcore/internal/service"
 	"productcore/internal/storage"
@@ -61,13 +62,14 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 	v1 := r.Group("/api/v1")
 
 	adminGroup := v1.Group("/admin")
-	adminGroup.Use(adminmw.AdminAuth(&cfg.Auth))
+	jwtMgr := jwtmgr.NewManager(cfg.Auth.JWTSecret)
+	adminGroup.Use(adminmw.AdminAuth(&cfg.Auth, jwtMgr))
 	admin.RegisterRoutes(adminGroup, productH, brandH, categoryH, groupH, uploadH, importH, platformTypeH, platformShopH)
 
 	openapi.RegisterRoutes(v1.Group("/open"), openProductH)
 
 	legacy := v1.Group("")
-	legacy.Use(adminmw.AdminAuth(&cfg.Auth))
+	legacy.Use(adminmw.AdminAuth(&cfg.Auth, jwtMgr))
 	admin.RegisterRoutes(legacy, productH, brandH, categoryH, groupH, uploadH, importH, platformTypeH, platformShopH)
 
 	return r

@@ -12,14 +12,21 @@ import (
 
 type CategoryService struct {
 	repo *repo.CategoryRepo
+	tenantID uint64
 }
 
 func NewCategoryService(repos *repo.Repos) *CategoryService {
-	return &CategoryService{repo: repos.Category}
+	return &CategoryService{repo: repos.Category, tenantID: 1}
+}
+
+func (s *CategoryService) ForTenant(tenantID uint64) *CategoryService {
+	cp := *s
+	cp.tenantID = repo.NormalizeTenantID(tenantID)
+	return &cp
 }
 
 func (s *CategoryService) Tree() ([]dto.CategoryDTO, error) {
-	cats, err := s.repo.ListAll()
+	cats, err := s.repo.ListAll(s.tenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -33,13 +40,13 @@ func (s *CategoryService) Tree() ([]dto.CategoryDTO, error) {
 func (s *CategoryService) Create(in *dto.CategoryDTO) (*dto.CategoryDTO, error) {
 	level := 0
 	if in.ParentID > 0 {
-		parent, err := s.repo.GetByID(in.ParentID)
+		parent, err := s.repo.GetByID(s.tenantID, in.ParentID)
 		if err != nil {
 			return nil, ErrNotFound
 		}
 		level = parent.Level + 1
 	}
-	c := model.Category{ParentID: in.ParentID, Name: in.Name, Level: level, Sort: in.Sort, ShowStatus: in.ShowStatus}
+	c := model.Category{TenantID: s.tenantID, ParentID: in.ParentID, Name: in.Name, Level: level, Sort: in.Sort, ShowStatus: in.ShowStatus}
 	if err := s.repo.Create(&c); err != nil {
 		return nil, err
 	}
@@ -48,7 +55,7 @@ func (s *CategoryService) Create(in *dto.CategoryDTO) (*dto.CategoryDTO, error) 
 }
 
 func (s *CategoryService) Update(id uint64, in *dto.CategoryDTO) (*dto.CategoryDTO, error) {
-	c, err := s.repo.GetByID(id)
+	c, err := s.repo.GetByID(s.tenantID, id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
@@ -64,11 +71,11 @@ func (s *CategoryService) Update(id uint64, in *dto.CategoryDTO) (*dto.CategoryD
 }
 
 func (s *CategoryService) Delete(id uint64) error {
-	n, _ := s.repo.CountChildren(id)
+	n, _ := s.repo.CountChildren(s.tenantID, id)
 	if n > 0 {
 		return errors.New("category has children")
 	}
-	if err := s.repo.Delete(id); err != nil {
+	if err := s.repo.Delete(s.tenantID, id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return ErrNotFound
 		}
@@ -78,7 +85,7 @@ func (s *CategoryService) Delete(id uint64) error {
 }
 
 func (s *CategoryService) toDTO(c *model.Category) dto.CategoryDTO {
-	count, _ := s.repo.CountProducts(c.ID)
+	count, _ := s.repo.CountProducts(s.tenantID, c.ID)
 	return dto.CategoryDTO{
 		ID: c.ID, ParentID: c.ParentID, Name: c.Name, Level: c.Level,
 		Sort: c.Sort, ShowStatus: c.ShowStatus, ProductCount: count,

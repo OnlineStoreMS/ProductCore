@@ -168,6 +168,7 @@ type PlatformShopService struct {
 	typeRepo *repo.PlatformTypeRepo
 	shopRepo *repo.PlatformShopRepo
 	listing  *repo.PlatformListingRepo
+	tenantID uint64
 }
 
 func NewPlatformShopService(repos *repo.Repos) *PlatformShopService {
@@ -175,7 +176,16 @@ func NewPlatformShopService(repos *repo.Repos) *PlatformShopService {
 		typeRepo: repos.PlatformType,
 		shopRepo: repos.PlatformShop,
 		listing:  repos.PlatformListing,
+		tenantID: 1,
 	}
+}
+
+
+func (s *PlatformShopService) ForTenant(tenantID uint64) *PlatformShopService {
+	cp := *s
+	cp.tenantID = repo.NormalizeTenantID(tenantID)
+	cp.shopRepo = s.shopRepo.WithTenant(tenantID)
+	return &cp
 }
 
 func (s *PlatformShopService) List(q dto.PlatformShopQuery) ([]dto.PlatformShopDTO, int64, error) {
@@ -207,7 +217,7 @@ func (s *PlatformShopService) Create(in *dto.PlatformShopDTO) (*dto.PlatformShop
 		}
 		return nil, err
 	}
-	item := &model.PlatformShop{
+	item := &model.PlatformShop{TenantID: s.tenantID, 
 		PlatformTypeID: pt.ID,
 		Name:           strings.TrimSpace(in.Name),
 		SourceChannel:  pt.Code,

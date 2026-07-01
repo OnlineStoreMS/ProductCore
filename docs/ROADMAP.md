@@ -58,7 +58,9 @@ ProductCore   VMS/PMS     WMS            OrderCenter    Fulfill    Logistics  Tr
 
 ## 3. 分阶段路线图
 
-### Phase 1 — 商品底库（当前，约 2~3 个月）
+> **当前优先级（2026-06）：** IAM Phase C 暂停；按 [VMS_PMS_DESIGN.md](./VMS_PMS_DESIGN.md) 推进供应链 **M1→M3**（供应商 / 采购），再进入 OMS。详见 [SUPPLY_CHAIN.md](./SUPPLY_CHAIN.md)。
+
+### Phase 1 — 商品底库（进行中）
 
 - [ ] ProductCore Go API：商品 CRUD、SKU 矩阵、分类/品牌/分组
 - [ ] 图片上传 OSS、商品详情
@@ -66,6 +68,18 @@ ProductCore   VMS/PMS     WMS            OrderCenter    Fulfill    Logistics  Tr
 - [ ] 预留 `platform_listing`、`platform_sku_mapping` 表（暂可不接 API）
 
 **交付标准：** 可在后台完整维护商品，SKU 数据准确，API 可供内部调用。
+
+---
+
+### Phase 1.5 — 供应商 + 采购（VMS/PMS，下一步）
+
+详见 [VMS_PMS_DESIGN.md](./VMS_PMS_DESIGN.md)。
+
+- [ ] SKU 自营/代发、多供应商报价、发货地、拿货价
+- [ ] 采购单、付款、物流、附件（销售单/付款截图）
+- [ ] 按 SKU 查询供货方案（为后续订单选供做准备）
+
+**交付标准：** 可在后台维护供应商与 SKU 供货关系；可创建采购单并跟踪付款、物流与凭证。
 
 ---
 
