@@ -17,6 +17,19 @@ func TestBuildSkuPlaceholderFileName(t *testing.T) {
 	}
 }
 
+func TestParseSkuSpecPartsNestedParens(t *testing.T) {
+	specName, specValue, err := parseSkuSpecParts("商品规格(Sigeyi Axo功率计贴纸可指定颜色--(5选1))")
+	if err != nil {
+		t.Fatalf("parseSkuSpecParts: %v", err)
+	}
+	if specName != "商品规格" {
+		t.Fatalf("specName = %q, want 商品规格", specName)
+	}
+	if specValue != "Sigeyi Axo功率计贴纸可指定颜色--(5选1)" {
+		t.Fatalf("specValue = %q", specValue)
+	}
+}
+
 func TestParseSkuDirSkipsExtensionlessPlaceholder(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "SKU01_规格(红色)"), nil, 0o644); err != nil {

@@ -22,7 +22,7 @@ const (
 
 var (
 	folderNamePattern = regexp.MustCompile(`^(.+)_商品ID_(.+)$`)
-	skuFilePattern    = regexp.MustCompile(`(?i)^SKU(\d+)_(.+)\((.+)\)\.(jpg|jpeg|png|webp)$`)
+	skuIndexPattern   = regexp.MustCompile(`(?i)^SKU(\d+)_(.+)$`)
 	numSuffixPattern  = regexp.MustCompile(`(\d+)`)
 )
 
@@ -309,15 +309,14 @@ func parseSkuDir(dir string) ([]ParsedSku, error) {
 		if _, ok := allowedSkuImageExt[ext]; !ok {
 			continue
 		}
-		m := skuFilePattern.FindStringSubmatch(name)
+		m := skuIndexPattern.FindStringSubmatch(strings.TrimSuffix(name, ext))
 		if m == nil {
 			return nil, fmt.Errorf("SKU 文件名格式不正确: %s（应为 SKU01_规格名(规格值).jpg）", name)
 		}
 		idx, _ := strconv.Atoi(m[1])
-		specName := strings.TrimSpace(m[2])
-		specValue := strings.TrimSpace(m[3])
-		if specName == "" || specValue == "" {
-			return nil, fmt.Errorf("SKU 文件名缺少规格名或规格值: %s", name)
+		specName, specValue, err := parseSkuSpecParts(m[2])
+		if err != nil {
+			return nil, fmt.Errorf("SKU 文件名格式不正确: %s（%v）", name, err)
 		}
 		code := fmt.Sprintf("SKU%02d", idx)
 		skus = append(skus, ParsedSku{
@@ -344,6 +343,25 @@ func parseSkuDir(dir string) ([]ParsedSku, error) {
 		seen[s.SpecValue] = struct{}{}
 	}
 	return skus, nil
+}
+
+// parseSkuSpecParts 解析「规格名(规格值)」；规格值内可含括号，如 (5选1)。
+func parseSkuSpecParts(body string) (specName, specValue string, err error) {
+	body = strings.TrimSpace(body)
+	if body == "" || !strings.HasSuffix(body, ")") {
+		return "", "", errors.New("缺少规格名或规格值")
+	}
+	body = strings.TrimSuffix(body, ")")
+	parenIdx := strings.Index(body, "(")
+	if parenIdx <= 0 {
+		return "", "", errors.New("缺少规格名或规格值")
+	}
+	specName = strings.TrimSpace(body[:parenIdx])
+	specValue = strings.TrimSpace(body[parenIdx+1:])
+	if specName == "" || specValue == "" {
+		return "", "", errors.New("缺少规格名或规格值")
+	}
+	return specName, specValue, nil
 }
 
 func sortByNumericSuffix(paths []string) {
