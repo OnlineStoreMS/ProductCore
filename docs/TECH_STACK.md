@@ -124,13 +124,16 @@ redis:
 ```
 
 ```bash
-make docker-up   # 启动 Redis:6380、MinIO API:9100、控制台:9101
+make docker-up   # 启动 Redis:6380（PostgreSQL:5433）
 ```
 
 ### 启用 MinIO 存储
 
+MinIO 由 **OSMS 平台**统一维护，不在 ProductCore 仓库单独启动：
+
 ```bash
-make docker-up   # 或 docker compose -f deploy/docker-compose.dev.yml up -d minio
+cd ~/projects/deploy
+make minio-up    # 数据目录 /data/osms/minio/data，API :9100 / 控制台 :9101
 ```
 
 修改 `configs/config.yaml`（或参考 `configs/config.minio.yaml`）：

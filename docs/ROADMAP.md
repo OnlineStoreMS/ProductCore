@@ -51,8 +51,7 @@ ProductCore   VMS/PMS     WMS            OrderCenter    Fulfill    Logistics  Tr
 | **TraceHub** | trace_id、单据图谱、操作时间线 | 跨模块追溯入口 |
 | **AfterSale (RMA)** | 电商售后、退货签收、开箱视频、退款回传 | 继承 SO 的 trace_id 与 shop |
 | **Integration Hub** | 各平台 API/Webhook | 订单/售后拉取、发货与凭证回传 |
-| **Store** | 门店、店员、门店订货 | 来源=store |
-| **ServiceDesk** | 维修/服务工单 | 可选配件出库 |
+| **Store (StoreCore / OSMS)** | 物理门店、收银台、门店销售/服务单、门店库存与采购、监控 | 引用 ProductCore SKU；供应商来自 SupplyCore |
 
 ---
 
@@ -126,17 +125,70 @@ ProductCore   VMS/PMS     WMS            OrderCenter    Fulfill    Logistics  Tr
 
 ---
 
-### Phase 5 — 门店 & 维修服务（约 2~3 个月）
+### Phase 5 — StoreCore / OSMS 门店管理（进行中）
 
-**门店订货单：**
+> 独立应用：**StoreCore**（`/home/asialeaf/projects/StoreCore`），API `:8094`、Web `:5179`，与 ProductCore / UserCore / SupplyCore 同栈（Go + Vue + ACR）。文档内历史名称 **StoreHub** 与本项目 **StoreCore** 指同一门店域。
+
+**与电商 OMS 的边界：**
+
+| 场景 | 系统 | 特征 |
+|------|------|------|
+| 即时零售 | StoreCore 收银台 | 现场选品结算，现金/静态二维码等，电子小票 |
+| 线下订货/派送 | StoreCore 销售订单 | 手动建单，订货后提货、送货上门、发快递 |
+| 维修/预约服务 | StoreCore 服务工单 | 中高端自行车类目，维修/保养/预约 |
+| 平台电商订单 | OMS（Phase 2+） | 抖店/淘宝等，`source_channel != store` |
+
+**六大模块（M1 已脚手架，按序深化）：**
+
+#### 5.1 收银台（POS）
+
+- [x] M0：同步租户 ProductCore 商品/SKU 搜索、购物车、创建即时零售单
+- [x] M0：多种结算方式枚举（现金、静态二维码、微信/支付宝预留）
+- [x] M0：电子小票 HTML 生成
+- [ ] M1：创建订单后微信/支付宝扫码支付（零售店模式）
+- [ ] M2：大小票模板设计、`receipt_templates` 管理
+- [ ] M3：打印机管理、云打印机对接（预留接口）
+
+#### 5.2 销售订单
+
+- [x] M0：门店销售单模型（与 POS 即时零售分离）
+- [ ] M1：手动创建、订货后提货流程
+- [ ] M2：送货上门 / 发快递履约、地址与物流单
+- [ ] M3：与销售单联动的采购需求（`need_procurement`）
+
+#### 5.3 服务工单（维修/预约）
+
+- [x] M0：服务单模型（维修、预约时间、设备信息）
+- [ ] M1：工单状态机、工程师派工
+- [ ] M2：与 [STORE_COLLECTION.md](./STORE_COLLECTION.md) 收款单联动
+- [ ] M3：可选配件 SKU 出库
+
+#### 5.4 门店库存
+
+- [x] M0：门店 × SKU 库存表（OSMS 库存子集）
+- [ ] M1：入库/出库/盘点流水
+- [ ] M2：与平台级 IMS/WMS 同步（平台库存系统开发后）
+- [ ] M3：收银/销售单占用与扣减
+
+#### 5.5 门店采购
+
+- [x] M0：门店采购单模型
+- [ ] M1：销售订单驱动采购、门店备货采购
+- [ ] M2：供应商从 **SupplyCore** 选取（HTTP 集成）
+- [ ] M3：到货入库更新门店库存
+
+#### 5.6 监控管理
+
+- [x] M0：监控设备档案（流地址/回放地址预留）
+- [ ] M1：实时预览（对接 NVR/云平台 SDK）
+- [ ] M2：录像查阅、时间轴检索
+
+**交付标准（M1）：** UserCore 应用中心可进入门店管理；可维护门店档案；收银台可搜索 ProductCore SKU 并完成结算；各模块列表 API 可用。
+
+**原 Phase 5 门店订货摘要（并入销售订单）：**
 - 订单来源 `source=store`，关联门店 ID、导购员
-- 可支持「门店自提 / 总部代发」两种履约方式
-- 库存策略：门店仓 vs 中心仓
-
-**维修/服务订单：**
-- 建议用 **ServiceOrder（服务工单）** 而非硬塞进零售订单表
-- 字段：客户、设备、故障描述、预约时间、工程师、工单状态、配件 SKU（可选）
-- 可与零售订单关联（例如购买后报修）
+- 可支持「门店自提 / 总部代发 / 快递」等履约方式
+- 库存策略：门店仓 vs 中心仓（待 IMS 统一）
 
 ---
 
@@ -371,7 +423,35 @@ ProductCore/                    # 可升级为 biz-platform  monorepo
 下一步   ──► OMS 核心 + 1 个渠道 + 后台订单列表
 再下一步 ──► 发货 + 物流回传
 然后     ──► 抖店/淘宝/小红书/视频号/闲鱼 逐个接入
-最后     ──► 门店订货 + 维修工单
+最后     ──► StoreCore 门店管理（OSMS：收银/销售/服务/库存/采购/监控）
 ```
 
-**一句话：** 商品库是「货」的中枢，订单系统是「单」的中枢，Integration 是「渠道」的翻译层；三者通过 **中央 SKU** 和 **事件** 连接，分阶段建设、模块边界清晰，后续扩展不会推倒重来。
+**一句话：** 商品库是「货」的中枢，订单系统是「单」的中枢，Integration 是「渠道」的翻译层，**StoreCore（OSMS）** 是「线下门店」的中枢；四者通过 **中央 SKU** 和 **事件** 连接，分阶段建设、模块边界清晰，后续扩展不会推倒重来。
+
+---
+
+## 13. StoreCore（OSMS）架构速览
+
+```
+UserCore (IAM) ──JWT──► StoreCore (:8094 / :5179)
+                              │
+         ┌────────────────────┼────────────────────┐
+         ▼                    ▼                    ▼
+   ProductCore           SupplyCore            平台 IMS/WMS
+   商品/SKU 底库          供应商/VMS            （后续，库存超集）
+         │                    │
+         └──── sku_id ────────┴──── supplier_id
+                              │
+                    StoreCore 六大模块
+         收银台 │ 销售订单 │ 服务工单 │ 库存 │ 采购 │ 监控
+```
+
+| 项目 | 值 |
+|------|-----|
+| 代码仓库 | `/home/asialeaf/projects/StoreCore` |
+| Go module | `storecore` |
+| Docker 镜像 | `storecore-api`、`storecore-web` |
+| UserCore 应用码 | `storecore`（权限 `store:read` / `store:write`） |
+| 平台编排 | `/home/asialeaf/projects/deploy` |
+
+相关文档：[ONLINE_OFFLINE.md](./ONLINE_OFFLINE.md)、[STORE_COLLECTION.md](./STORE_COLLECTION.md)。
