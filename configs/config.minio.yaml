@@ -4,8 +4,7 @@
 # 使用本文件启动：./bin/productcore -config configs/config.minio.yaml
 # 或把 storage 段复制到 configs/config.yaml
 #
-# MinIO 启动：make docker-up
-# MinIO 控制台：http://127.0.0.1:9101  (minioadmin / minioadmin)
+# MinIO 由 OSMS 平台统一部署（deploy 仓库 make minio-up，数据目录 /data/osms/minio/data）
 #
 # 目录规则（local / minio 一致）：
 #   products/{商品ID}/main|album|detail|videos|specs|skus/...
