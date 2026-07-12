@@ -47,6 +47,16 @@ func (s *ProductService) withRepo(tx *repo.ProductRepo) *ProductService {
 }
 
 func (s *ProductService) List(q dto.ProductQuery) ([]dto.ProductDTO, int64, error) {
+	if q.CategoryID > 0 && len(q.CategoryIDs) == 0 {
+		ids, err := s.meta.Category.ListSelfAndDescendantIDs(s.tenantID, q.CategoryID)
+		if err != nil {
+			return nil, 0, err
+		}
+		if len(ids) > 0 {
+			q.CategoryIDs = ids
+			q.CategoryID = 0
+		}
+	}
 	products, total, err := s.repo.List(q)
 	if err != nil {
 		return nil, 0, err

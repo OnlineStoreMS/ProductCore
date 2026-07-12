@@ -87,13 +87,14 @@ type ProductDTO struct {
 }
 
 type ProductQuery struct {
-	Keyword       string `form:"keyword"`
-	BrandID       uint64 `form:"brandId"`
-	CategoryID    uint64 `form:"categoryId"`
-	GroupID       uint64 `form:"groupId"`
-	PublishStatus *int8  `form:"publishStatus"`
-	Page          int    `form:"page"`
-	PageSize      int    `form:"pageSize"`
+	Keyword       string   `form:"keyword"`
+	BrandID       uint64   `form:"brandId"`
+	CategoryID    uint64   `form:"categoryId"`
+	CategoryIDs   []uint64 `form:"-"` // 内部：含子孙分类
+	GroupID       uint64   `form:"groupId"`
+	PublishStatus *int8    `form:"publishStatus"`
+	Page          int      `form:"page"`
+	PageSize      int      `form:"pageSize"`
 }
 
 type BatchIDsRequest struct {

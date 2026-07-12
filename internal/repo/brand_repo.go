@@ -93,6 +93,31 @@ func (r *CategoryRepo) CountProducts(tenantID, categoryID uint64) (int64, error)
 	return n, err
 }
 
+// ListSelfAndDescendantIDs 返回分类自身及其全部子孙 ID（用于商品列表按父分类筛选）。
+func (r *CategoryRepo) ListSelfAndDescendantIDs(tenantID, rootID uint64) ([]uint64, error) {
+	if rootID == 0 {
+		return nil, nil
+	}
+	all, err := r.ListAll(tenantID)
+	if err != nil {
+		return nil, err
+	}
+	children := map[uint64][]uint64{}
+	for _, c := range all {
+		children[c.ParentID] = append(children[c.ParentID], c.ID)
+	}
+	out := make([]uint64, 0, 8)
+	var walk func(id uint64)
+	walk = func(id uint64) {
+		out = append(out, id)
+		for _, childID := range children[id] {
+			walk(childID)
+		}
+	}
+	walk(rootID)
+	return out, nil
+}
+
 type GroupRepo struct{ db *gorm.DB }
 
 func NewGroupRepo(db *gorm.DB) *GroupRepo { return &GroupRepo{db: db} }

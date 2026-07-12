@@ -56,7 +56,9 @@ func (r *ProductRepo) List(q dto.ProductQuery) ([]model.Product, int64, error) {
 	if q.BrandID > 0 {
 		tx = tx.Where("brand_id = ?", q.BrandID)
 	}
-	if q.CategoryID > 0 {
+	if len(q.CategoryIDs) > 0 {
+		tx = tx.Where("category_id IN ?", q.CategoryIDs)
+	} else if q.CategoryID > 0 {
 		tx = tx.Where("category_id = ?", q.CategoryID)
 	}
 	if q.PublishStatus != nil {
@@ -81,7 +83,9 @@ func (r *ProductRepo) applyListFilters(tx *gorm.DB, q dto.ProductQuery) *gorm.DB
 	if q.BrandID > 0 {
 		tx = tx.Where("brand_id = ?", q.BrandID)
 	}
-	if q.CategoryID > 0 {
+	if len(q.CategoryIDs) > 0 {
+		tx = tx.Where("category_id IN ?", q.CategoryIDs)
+	} else if q.CategoryID > 0 {
 		tx = tx.Where("category_id = ?", q.CategoryID)
 	}
 	if q.PublishStatus != nil {
