@@ -1,0 +1,174 @@
+# WarehouseCore（仓储中心）设计说明
+
+> 独立应用 **WarehouseCore** 作为 OSMS 平台库存管理中心（WMS + 初期 IMS）。  
+> 与 [ROADMAP.md](./ROADMAP.md)、[SUPPLY_CHAIN.md](./SUPPLY_CHAIN.md) 对齐。
+
+---
+
+## 1. 决策
+
+| 项 | 选择 |
+|----|------|
+| 商品关系 | **完全独立**：仓配父SKU/库存SKU 不强制关联 ProductCore；预留 `pim_spu_id` / `pim_sku_id` |
+| 落地形态 | 独立仓库 `/home/asialeaf/projects/WarehouseCore` |
+| Go module | `warehousecore` |
+| API / Web | `:8095` / `:5180` |
+| DB / MinIO | `warehousecore` / bucket `warehousecore` |
+| UserCore | app code `warehousecore`，权限 `warehouse:read` / `warehouse:write` |
+| 展示名 | 仓储中心 |
+
+**原则：**
+
+1. 仓配 SKU 编码租户内唯一，条码以 `sku_code` 为准
+2. 库存只通过单据过账变动，禁止直接改结存
+3. `stock_movements` 只追加不删改
+4. 与 ProductCore / StoreCore / SupplyCore **弱耦合**
+5. 一期不做批次 lot、渠道占用、拣货打包
+
+---
+
+## 2. 平台位置
+
+```
+UserCore (IAM) ──JWT──► WarehouseCore (:8095 / :5180)
+                              │
+         ┌────────────────────┼────────────────────┐
+         ▼                    ▼                    ▼
+   ProductCore           SupplyCore            StoreCore
+   （后期映射）           （采购入库 GRN）        （调拨到店）
+```
+
+| 中心 | 职责边界 |
+|------|----------|
+| ProductCore | 销售/PIM 底库（本阶段不依赖） |
+| WarehouseCore | 仓配主档 + 中心仓库存账 + 仓内单据 |
+| StoreCore | 门店仓子集（`store_inventories`） |
+| SupplyCore | 采购到货入库（二期对接） |
+
+---
+
+## 3. 菜单结构
+
+```
+仓储中心
+├── 基础商品
+│   ├── 商品资料（父SKU + 库存SKU）
+│   ├── 组合品 / 组装品
+│   └── 条码打印
+├── 库存情况
+│   ├── 库存查询
+│   ├── 库存汇总账
+│   ├── 库存明细表
+│   └── 滞销查询
+├── 仓库货位
+│   ├── 仓库设置
+│   └── 库位管理
+├── 仓库盘点
+│   ├── 仓库盘点单
+│   └── 盘点明细表
+├── 仓库调拨
+│   └── 仓库调拨单
+└── 其他出入库
+    ├── 其他入库单
+    └── 其他出库单
+```
+
+---
+
+## 4. 数据模型
+
+### 4.1 仓配主档
+
+**`inv_categories`** — 仓配分类（本中心自建）
+
+| 字段 | 说明 |
+|------|------|
+| tenant_id | |
+| code / name | 编码、名称 |
+| parent_id | 上级分类 |
+| sort / status | |
+
+**`inv_products`** — 父SKU / 主SKU
+
+| 字段 | 说明 |
+|------|------|
+| tenant_id | |
+| parent_sku | 父SKU 编码，租户内唯一 |
+| name | 商品名称 |
+| category_id | 仓配分类 |
+| developed_at | 开发日期 |
+| default_warehouse_id | 默认发货仓库 |
+| score_factor | 分值系数 |
+| remark / pic / album_pics | |
+| status | 启用/停用 |
+| pim_spu_id | 可空，后期映射 |
+
+**`inv_skus`** — 库存SKU
+
+| 字段 | 说明 |
+|------|------|
+| parent_id | 所属父SKU |
+| sku_code | 库存SKU，租户内唯一（条码主码） |
+| pic / status | |
+| product_type | `normal` / `combo` / `assembly` |
+| pick_name | 配货名称 |
+| style1 / style2 / style3 | 款式 |
+| weight_g | 重量（克） |
+| last_purchase_price / min_purchase_price / retail_price | |
+| description / upc / asin / supplier_item_no | |
+| pim_sku_id | 可空，后期映射 |
+
+**`inv_bom_headers` / `inv_bom_items`** — 组合/组装 BOM
+
+| 类型 | 含义 | 库存行为 |
+|------|------|----------|
+| combo | 虚拟捆绑 | 出库展开扣子件 |
+| assembly | 加工成品 | 按成品出入库；加工领料二期 |
+
+### 4.2 仓库货位
+
+**`warehouses`**：code、name、type(`central`/`return`/`transit`)、地址、联系人、status、is_default
+
+**`warehouse_locations`**：warehouse_id、code、zone/aisle/shelf/bin、status；无库位时用虚拟库位 `DEFAULT`
+
+### 4.3 库存账
+
+**`inv_balances`**：tenant × warehouse × location × inv_sku → `on_hand`
+
+**`stock_movements`**：只追加；qty、direction、doc_type、doc_no、balance_after、ref_doc_type/ref_doc_id
+
+变动类型：`other_in` / `other_out` / `transfer_in` / `transfer_out` / `stocktake_gain` / `stocktake_loss` / `purchase_in`（预留）/ `sale_out`（预留）
+
+### 4.4 单据
+
+| 表 | 状态机 |
+|----|--------|
+| `other_inbound_orders` / items | draft → posted / cancelled |
+| `other_outbound_orders` / items | draft → posted / cancelled |
+| `stocktake_orders` / items | draft → counting → review → posted / cancelled |
+| `transfer_orders` / items | draft → in_transit → received / cancelled |
+
+---
+
+## 5. 分阶段里程碑
+
+| 阶段 | 内容 | 交付标准 |
+|------|------|----------|
+| **M0** | 空应用 + UserCore/deploy + 登录 | 应用中心可打开仓储中心 |
+| **M1** | 分类、父SKU/库存SKU、BOM、仓库/库位、条码打印 | 可维护仓配商品与仓位 |
+| **M2** | balances/movements、其他入/出、四类库存查询 | 手工出入库后账实可查 |
+| **M3** | 盘点单/明细、调拨单过账 | 仓内调拨与盘点闭环 |
+| **M4** | PIM 映射 API、采购入库预留、调拨到店预留 | 跨中心接口就绪 |
+
+---
+
+## 6. 工程信息
+
+| 项目 | 值 |
+|------|-----|
+| 代码仓库 | `/home/asialeaf/projects/WarehouseCore` |
+| Go module | `warehousecore` |
+| Docker 镜像 | `warehousecore-api`、`warehousecore-web` |
+| UserCore 应用码 | `warehousecore` |
+| 权限 | `warehouse:read` / `warehouse:write` |
+| 平台编排 | `/home/asialeaf/projects/deploy` |

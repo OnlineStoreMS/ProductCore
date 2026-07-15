@@ -57,7 +57,7 @@ ProductCore   VMS/PMS     WMS            OrderCenter    Fulfill    Logistics  Tr
 
 ## 3. 分阶段路线图
 
-> **当前优先级（2026-06）：** IAM Phase C 暂停；按 [VMS_PMS_DESIGN.md](./VMS_PMS_DESIGN.md) 推进供应链 **M1→M3**（供应商 / 采购），再进入 OMS。详见 [SUPPLY_CHAIN.md](./SUPPLY_CHAIN.md)。
+> **当前优先级（2026-07）：** 按 [VMS_PMS_DESIGN.md](./VMS_PMS_DESIGN.md) 推进供应链；并行建设 [WMS_DESIGN.md](./WMS_DESIGN.md) **WarehouseCore**（仓储中心 M0→M3）。详见 [SUPPLY_CHAIN.md](./SUPPLY_CHAIN.md)。
 
 ### Phase 1 — 商品底库（进行中）
 
@@ -189,6 +189,25 @@ ProductCore   VMS/PMS     WMS            OrderCenter    Fulfill    Logistics  Tr
 - 订单来源 `source=store`，关联门店 ID、导购员
 - 可支持「门店自提 / 总部代发 / 快递」等履约方式
 - 库存策略：门店仓 vs 中心仓（待 IMS 统一）
+
+---
+
+### Phase 5.5 — WarehouseCore / 仓储中心（进行中）
+
+> 独立应用：**WarehouseCore**（`/home/asialeaf/projects/WarehouseCore`），API `:8095`、Web `:5180`。设计详见 [WMS_DESIGN.md](./WMS_DESIGN.md)。  
+> 仓配商品主档与 ProductCore **互不强制关联**（预留 `pim_sku_id`）；门店库存仍归 StoreCore。
+
+**模块（按里程碑）：**
+
+| 阶段 | 内容 |
+|------|------|
+| M0 | 脚手架 + UserCore 注册 + deploy |
+| M1 | 仓配分类/父SKU/库存SKU/组合BOM/仓库库位/条码打印 |
+| M2 | 库存结存与流水 + 其他出入库 + 库存查询/汇总/明细/滞销 |
+| M3 | 盘点单/明细 + 仓间调拨单 |
+| M4 | PIM 映射、采购入库、调拨到店（预留接口） |
+
+**交付标准（M1）：** UserCore 应用中心可进入仓储中心；可维护仓配商品与仓库/库位。
 
 ---
 
@@ -419,14 +438,14 @@ ProductCore/                    # 可升级为 biz-platform  monorepo
 ## 12. 推荐优先级总结
 
 ```
-现在     ──► ProductCore 商品库 + SKU + 平台映射表
-下一步   ──► OMS 核心 + 1 个渠道 + 后台订单列表
+现在     ──► ProductCore 商品库 + WarehouseCore 仓储中心（并行）
+下一步   ──► SupplyCore 采购闭环 + OMS 核心
 再下一步 ──► 发货 + 物流回传
-然后     ──► 抖店/淘宝/小红书/视频号/闲鱼 逐个接入
-最后     ──► StoreCore 门店管理（OSMS：收银/销售/服务/库存/采购/监控）
+然后     ──► 多渠道接入
+并行     ──► StoreCore 门店管理深化
 ```
 
-**一句话：** 商品库是「货」的中枢，订单系统是「单」的中枢，Integration 是「渠道」的翻译层，**StoreCore（OSMS）** 是「线下门店」的中枢；四者通过 **中央 SKU** 和 **事件** 连接，分阶段建设、模块边界清晰，后续扩展不会推倒重来。
+**一句话：** 商品库是「货」的中枢，**WarehouseCore** 是「仓」的中枢，订单系统是「单」的中枢，**StoreCore** 是「线下门店」的中枢；通过可映射 SKU 与事件连接，分阶段建设。
 
 ---
 
@@ -437,10 +456,10 @@ UserCore (IAM) ──JWT──► StoreCore (:8094 / :5179)
                               │
          ┌────────────────────┼────────────────────┐
          ▼                    ▼                    ▼
-   ProductCore           SupplyCore            平台 IMS/WMS
-   商品/SKU 底库          供应商/VMS            （后续，库存超集）
-         │                    │
-         └──── sku_id ────────┴──── supplier_id
+   ProductCore           SupplyCore            WarehouseCore
+   商品/SKU 底库          供应商/VMS            中心仓 WMS/IMS
+         │                    │                    │
+         └──── sku_id ────────┴──── supplier_id ───┘
                               │
                     StoreCore 六大模块
          收银台 │ 销售订单 │ 服务工单 │ 库存 │ 采购 │ 监控
@@ -455,3 +474,28 @@ UserCore (IAM) ──JWT──► StoreCore (:8094 / :5179)
 | 平台编排 | `/home/asialeaf/projects/deploy` |
 
 相关文档：[ONLINE_OFFLINE.md](./ONLINE_OFFLINE.md)、[STORE_COLLECTION.md](./STORE_COLLECTION.md)。
+
+---
+
+## 14. WarehouseCore（仓储中心）架构速览
+
+```
+UserCore (IAM) ──JWT──► WarehouseCore (:8095 / :5180)
+                              │
+         ┌────────────────────┼────────────────────┐
+         ▼                    ▼                    ▼
+   ProductCore           SupplyCore            StoreCore
+   （后期 pim_sku 映射）  （采购入库 GRN）       （调拨到店）
+                              │
+              仓配主档 │ 仓库货位 │ 库存账 │ 盘点 │ 调拨 │ 其他出入库
+```
+
+| 项目 | 值 |
+|------|-----|
+| 代码仓库 | `/home/asialeaf/projects/WarehouseCore` |
+| Go module | `warehousecore` |
+| Docker 镜像 | `warehousecore-api`、`warehousecore-web` |
+| UserCore 应用码 | `warehousecore`（权限 `warehouse:read` / `warehouse:write`） |
+| 平台编排 | `/home/asialeaf/projects/deploy` |
+
+相关文档：[WMS_DESIGN.md](./WMS_DESIGN.md)、[SUPPLY_CHAIN.md](./SUPPLY_CHAIN.md)。
