@@ -49,10 +49,14 @@ UserCore (IAM) ──JWT──► WarehouseCore (:8095 / :5180)
 
 ## 3. 菜单结构
 
+> 商品管理对齐 [普源云ERP](https://erp.allroot.com/erp/main/index)：**商品信息**、**商品类别**、**包装规格**；跨境申报/店铺SKU/1688 等不在仓配一期范围。
+
 ```
 仓储中心
-├── 基础商品
-│   ├── 商品资料（父SKU + 库存SKU）
+├── 商品管理
+│   ├── 商品信息（父SKU + 库存SKU）
+│   ├── 商品类别
+│   ├── 包装规格
 │   ├── 组合品 / 组装品
 │   └── 条码打印
 ├── 库存情况
@@ -84,9 +88,20 @@ UserCore (IAM) ──JWT──► WarehouseCore (:8095 / :5180)
 | 字段 | 说明 |
 |------|------|
 | tenant_id | |
-| code / name | 编码、名称 |
+| code / name | 编码、商品类别名称 |
+| alias_cn / alias_en | 中文品名、英文品名 |
 | parent_id | 上级分类 |
 | sort / status | |
+
+**`inv_pack_specs`** — 包装规格
+
+| 字段 | 说明 |
+|------|------|
+| name | 包装规格名称，租户内唯一 |
+| cost / weight_g | 成本价、重量(g) |
+| remark / status | |
+
+**`inv_pack_spec_skus`** — 包装规格绑定库存SKU（数量范围）
 
 **`inv_products`** — 父SKU / 主SKU
 
@@ -96,6 +111,7 @@ UserCore (IAM) ──JWT──► WarehouseCore (:8095 / :5180)
 | parent_sku | 父SKU 编码，租户内唯一 |
 | name | 商品名称 |
 | category_id | 仓配分类 |
+| pack_spec_id | 外包装规格 |
 | developed_at | 开发日期 |
 | default_warehouse_id | 默认发货仓库 |
 | score_factor | 分值系数 |
@@ -109,14 +125,19 @@ UserCore (IAM) ──JWT──► WarehouseCore (:8095 / :5180)
 |------|------|
 | parent_id | 所属父SKU |
 | sku_code | 库存SKU，租户内唯一（条码主码） |
-| pic / status | |
-| product_type | `normal` / `combo` / `assembly` |
+| pic / status | SKU 图片、状态 |
+| product_type | 结构：`normal` / `combo` / `assembly` |
+| goods_kind | 商品类型：`normal`普通 / `packaging`包材 / `accessory`配件 / `gift`赠品 |
 | pick_name | 配货名称 |
 | style1 / style2 / style3 | 款式 |
 | weight_g | 重量（克） |
 | last_purchase_price / min_purchase_price / retail_price | |
 | description / upc / asin / supplier_item_no | |
 | pim_sku_id | 可空，后期映射 |
+
+父商品另含：物流报关（申报名/重量/价值/原产国/海关编码）、采购（渠道/采购员/最低价/MOQ）、**多供应商**（挂在父商品，供应商主数据来自 SupplyCore VMS）、包装尺寸与成本、销售属性与多档售价、商品主图。
+
+侧栏「商品」对齐普源：商品管理（信息/类别/包装规格）、商品明细（组装/组合/店铺SKU）、条码打印、其它（商品费用设置 / 重量检测 / 利润试算）。
 
 **`inv_bom_headers` / `inv_bom_items`** — 组合/组装 BOM
 
