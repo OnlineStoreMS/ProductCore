@@ -37,6 +37,22 @@ func (s *CategoryService) Tree() ([]dto.CategoryDTO, error) {
 	return buildCategoryTree(flat, 0), nil
 }
 
+// VisibleTree 对外只读：仅返回展示中的分类树
+func (s *CategoryService) VisibleTree() ([]dto.CategoryDTO, error) {
+	cats, err := s.repo.ListAll(s.tenantID)
+	if err != nil {
+		return nil, err
+	}
+	flat := make([]dto.CategoryDTO, 0, len(cats))
+	for _, c := range cats {
+		if c.ShowStatus != 1 {
+			continue
+		}
+		flat = append(flat, s.toDTO(&c))
+	}
+	return buildCategoryTree(flat, 0), nil
+}
+
 func (s *CategoryService) Create(in *dto.CategoryDTO) (*dto.CategoryDTO, error) {
 	level := 0
 	if in.ParentID > 0 {
@@ -88,7 +104,7 @@ func (s *CategoryService) toDTO(c *model.Category) dto.CategoryDTO {
 	count, _ := s.repo.CountProducts(s.tenantID, c.ID)
 	return dto.CategoryDTO{
 		ID: c.ID, ParentID: c.ParentID, Name: c.Name, Level: c.Level,
-		Sort: c.Sort, ShowStatus: c.ShowStatus, ProductCount: count,
+		Sort: c.Sort, ShowStatus: c.ShowStatus, Icon: c.Icon, ProductCount: count,
 	}
 }
 

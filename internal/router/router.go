@@ -53,6 +53,7 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 	platformShopH := admin.NewPlatformShopHandler(platformShopSvc, listingSvc)
 	uploadH := admin.NewUploadHandler(store)
 	openProductH := openapi.NewProductHandler(productSvc)
+	openCategoryH := openapi.NewCategoryHandler(categorySvc)
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok", "service": "productcore"})
@@ -66,7 +67,7 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 	adminGroup.Use(adminmw.AdminAuth(&cfg.Auth, jwtMgr))
 	admin.RegisterRoutes(adminGroup, productH, brandH, categoryH, groupH, uploadH, importH, platformTypeH, platformShopH)
 
-	openapi.RegisterRoutes(v1.Group("/open"), openProductH)
+	openapi.RegisterRoutes(v1.Group("/open"), openProductH, openCategoryH)
 
 	legacy := v1.Group("")
 	legacy.Use(adminmw.AdminAuth(&cfg.Auth, jwtMgr))

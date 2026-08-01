@@ -145,6 +145,7 @@ type CategoryDTO struct {
 	Level        int           `json:"level"`
 	Sort         int           `json:"sort"`
 	ShowStatus   int8          `json:"showStatus"`
+	Icon         string        `json:"icon,omitempty"`
 	ProductCount int64         `json:"productCount,omitempty"`
 	Children     []CategoryDTO `json:"children,omitempty"`
 }
