@@ -38,6 +38,7 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 	brandSvc := service.NewBrandService(repos)
 	categorySvc := service.NewCategoryService(repos)
 	groupSvc := service.NewProductGroupService(repos, productSvc)
+	keywordSvc := service.NewProductKeywordService(repos, productSvc)
 	platformTypeSvc := service.NewPlatformTypeService(repos)
 	platformShopSvc := service.NewPlatformShopService(repos)
 	listingSvc := service.NewPlatformListingService(repos, productSvc)
@@ -49,6 +50,7 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 	brandH := admin.NewBrandHandler(brandSvc)
 	categoryH := admin.NewCategoryHandler(categorySvc)
 	groupH := admin.NewGroupHandler(groupSvc)
+	keywordH := admin.NewKeywordHandler(keywordSvc)
 	platformTypeH := admin.NewPlatformTypeHandler(platformTypeSvc)
 	platformShopH := admin.NewPlatformShopHandler(platformShopSvc, listingSvc)
 	uploadH := admin.NewUploadHandler(store)
@@ -65,13 +67,13 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 	adminGroup := v1.Group("/admin")
 	jwtMgr := jwtmgr.NewManager(cfg.Auth.JWTSecret)
 	adminGroup.Use(adminmw.AdminAuth(&cfg.Auth, jwtMgr))
-	admin.RegisterRoutes(adminGroup, productH, brandH, categoryH, groupH, uploadH, importH, platformTypeH, platformShopH)
+	admin.RegisterRoutes(adminGroup, productH, brandH, categoryH, groupH, keywordH, uploadH, importH, platformTypeH, platformShopH)
 
 	openapi.RegisterRoutes(v1.Group("/open"), openProductH, openCategoryH)
 
 	legacy := v1.Group("")
 	legacy.Use(adminmw.AdminAuth(&cfg.Auth, jwtMgr))
-	admin.RegisterRoutes(legacy, productH, brandH, categoryH, groupH, uploadH, importH, platformTypeH, platformShopH)
+	admin.RegisterRoutes(legacy, productH, brandH, categoryH, groupH, keywordH, uploadH, importH, platformTypeH, platformShopH)
 
 	return r
 }

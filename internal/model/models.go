@@ -41,12 +41,14 @@ type Category struct {
 
 func (Category) TableName() string { return "categories" }
 
-// ProductGroup 商品分组
+// ProductGroup 商品分组（树形，支持子分组）
 type ProductGroup struct {
 	BaseModel
 	TenantID    uint64 `gorm:"index;not null;default:1" json:"tenantId"`
+	ParentID    uint64 `gorm:"default:0;index" json:"parentId"`
 	Name        string `gorm:"size:64;not null" json:"name"`
 	Description string `gorm:"size:512" json:"description"`
+	Level       int    `gorm:"default:0" json:"level"`
 	Sort        int    `gorm:"default:0" json:"sort"`
 }
 
@@ -117,6 +119,26 @@ type ProductGroupRelation struct {
 }
 
 func (ProductGroupRelation) TableName() string { return "product_group_relations" }
+
+// ProductKeyword 商品关键词（细分类标签）
+type ProductKeyword struct {
+	BaseModel
+	TenantID    uint64 `gorm:"index;not null;default:1" json:"tenantId"`
+	Name        string `gorm:"size:64;not null" json:"name"`
+	Description string `gorm:"size:512" json:"description"`
+	Sort        int    `gorm:"default:0" json:"sort"`
+}
+
+func (ProductKeyword) TableName() string { return "product_keywords" }
+
+// ProductKeywordRelation 商品-关键词关联
+type ProductKeywordRelation struct {
+	ID        uint64 `gorm:"primaryKey;autoIncrement"`
+	ProductID uint64 `gorm:"index;not null;uniqueIndex:uk_product_keyword"`
+	KeywordID uint64 `gorm:"index;not null;uniqueIndex:uk_product_keyword"`
+}
+
+func (ProductKeywordRelation) TableName() string { return "product_keyword_relations" }
 
 // PlatformShopType 电商平台类型（抖店、淘宝、拼多多等）
 type PlatformShopType struct {

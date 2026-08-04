@@ -7,7 +7,7 @@ func ensureTenantSchema(db *gorm.DB) error {
 		return nil
 	}
 	tables := []string{
-		"brands", "categories", "product_groups", "products", "product_skus",
+		"brands", "categories", "product_groups", "product_keywords", "products", "product_skus",
 		"platform_shops", "platform_listings",
 	}
 	for _, t := range tables {

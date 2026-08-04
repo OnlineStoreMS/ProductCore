@@ -52,22 +52,7 @@ func (r *ProductRepo) List(q dto.ProductQuery) ([]model.Product, int64, error) {
 		q.PageSize = 10
 	}
 	tx := r.db.Scopes(scopeTenant(r.tenantID)).Model(&model.Product{}).Where("is_draft = ?", 0)
-	tx = applyKeywordFilter(tx, q.Keyword)
-	if q.BrandID > 0 {
-		tx = tx.Where("brand_id = ?", q.BrandID)
-	}
-	if len(q.CategoryIDs) > 0 {
-		tx = tx.Where("category_id IN ?", q.CategoryIDs)
-	} else if q.CategoryID > 0 {
-		tx = tx.Where("category_id = ?", q.CategoryID)
-	}
-	if q.PublishStatus != nil {
-		tx = tx.Where("publish_status = ?", *q.PublishStatus)
-	}
-	if q.GroupID > 0 {
-		tx = tx.Joins("JOIN product_group_relations pgr ON pgr.product_id = products.id").
-			Where("pgr.group_id = ?", q.GroupID)
-	}
+	tx = r.applyListFilters(tx, q)
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -91,9 +76,16 @@ func (r *ProductRepo) applyListFilters(tx *gorm.DB, q dto.ProductQuery) *gorm.DB
 	if q.PublishStatus != nil {
 		tx = tx.Where("publish_status = ?", *q.PublishStatus)
 	}
-	if q.GroupID > 0 {
+	if len(q.GroupIDs) > 0 {
+		tx = tx.Joins("JOIN product_group_relations pgr ON pgr.product_id = products.id").
+			Where("pgr.group_id IN ?", q.GroupIDs)
+	} else if q.GroupID > 0 {
 		tx = tx.Joins("JOIN product_group_relations pgr ON pgr.product_id = products.id").
 			Where("pgr.group_id = ?", q.GroupID)
+	}
+	if q.KeywordID > 0 {
+		tx = tx.Joins("JOIN product_keyword_relations pkr ON pkr.product_id = products.id").
+			Where("pkr.keyword_id = ?", q.KeywordID)
 	}
 	return tx
 }
@@ -268,6 +260,20 @@ func (r *ProductRepo) DeleteGroupRelations(productID uint64) error {
 
 func (r *ProductRepo) CreateGroupRelation(productID, groupID uint64) error {
 	return r.db.Create(&model.ProductGroupRelation{ProductID: productID, GroupID: groupID}).Error
+}
+
+func (r *ProductRepo) ListKeywordIDs(productID uint64) ([]uint64, error) {
+	var ids []uint64
+	err := r.db.Model(&model.ProductKeywordRelation{}).Where("product_id = ?", productID).Pluck("keyword_id", &ids).Error
+	return ids, err
+}
+
+func (r *ProductRepo) DeleteKeywordRelations(productID uint64) error {
+	return r.db.Where("product_id = ?", productID).Delete(&model.ProductKeywordRelation{}).Error
+}
+
+func (r *ProductRepo) CreateKeywordRelation(productID, keywordID uint64) error {
+	return r.db.Create(&model.ProductKeywordRelation{ProductID: productID, KeywordID: keywordID}).Error
 }
 
 func (r *ProductRepo) Transaction(fn func(tx *ProductRepo) error) error {

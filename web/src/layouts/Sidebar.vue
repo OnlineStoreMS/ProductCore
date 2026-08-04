@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowDown } from '@element-plus/icons-vue'
 import {
-  Box, Collection, Delete, Document, FolderOpened, Grid, HomeFilled, Menu as MenuIcon, Setting, Shop,
+  Box, Collection, CollectionTag, Delete, Document, FolderOpened, Grid, HomeFilled, Menu as MenuIcon, Setting, Shop,
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -29,6 +29,7 @@ const menuItems: MenuEntry[] = [
       { path: '/products', title: '商品列表', icon: Grid },
       { path: '/products/drafts', title: '商品草稿箱', icon: Document },
       { path: '/groups', title: '商品分组', icon: FolderOpened },
+      { path: '/keywords', title: '关键词管理', icon: CollectionTag },
       { path: '/products/trash', title: '商品回收站', icon: Delete },
     ],
   },
@@ -51,7 +52,7 @@ const menuItems: MenuEntry[] = [
 ]
 
 function openKeysForPath(path: string): string[] {
-  if (path.startsWith('/products') || path.startsWith('/groups')) return ['商品管理']
+  if (path.startsWith('/products') || path.startsWith('/groups') || path.startsWith('/keywords')) return ['商品管理']
   if (path.startsWith('/platform')) return ['渠道管理']
   if (path.startsWith('/categories') || path.startsWith('/brands')) return ['基础数据']
   return []

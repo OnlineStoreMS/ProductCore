@@ -50,6 +50,7 @@ const breadcrumbs = computed(() => {
   if (route.path.startsWith('/categories')) return ['基础数据', '商品分类']
   if (route.path.startsWith('/brands')) return ['基础数据', '品牌管理']
   if (route.path.startsWith('/groups')) return ['商品管理', '商品分组']
+  if (route.path.startsWith('/keywords')) return ['商品管理', '关键词管理']
   return ['首页', title]
 })
 </script>

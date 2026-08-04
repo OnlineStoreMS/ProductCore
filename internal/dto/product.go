@@ -56,6 +56,7 @@ type ProductDTO struct {
 	CategoryID     uint64           `json:"categoryId"`
 	CategoryName   string           `json:"categoryName,omitempty"`
 	GroupIDs       []uint64         `json:"groupIds"`
+	KeywordIDs     []uint64         `json:"keywordIds"`
 	Pic            string           `json:"pic"`
 	AlbumPics      []string         `json:"albumPics"`
 	ProductVideo   string           `json:"productVideo,omitempty"`
@@ -92,6 +93,8 @@ type ProductQuery struct {
 	CategoryID    uint64   `form:"categoryId"`
 	CategoryIDs   []uint64 `form:"-"` // 内部：含子孙分类
 	GroupID       uint64   `form:"groupId"`
+	GroupIDs      []uint64 `form:"-"` // 内部：含子孙分组
+	KeywordID     uint64   `form:"keywordId"`
 	PublishStatus *int8    `form:"publishStatus"`
 	Page          int      `form:"page"`
 	PageSize      int      `form:"pageSize"`
@@ -151,10 +154,26 @@ type CategoryDTO struct {
 }
 
 type ProductGroupDTO struct {
+	ID           uint64            `json:"id,omitempty"`
+	ParentID     uint64            `json:"parentId"`
+	Name         string            `json:"name" binding:"required"`
+	Description  string            `json:"description"`
+	Level        int               `json:"level"`
+	Sort         int               `json:"sort"`
+	ProductCount int64             `json:"productCount,omitempty"`
+	CreateTime   string            `json:"createTime,omitempty"`
+	Children     []ProductGroupDTO `json:"children,omitempty"`
+}
+
+type ProductKeywordDTO struct {
 	ID           uint64 `json:"id,omitempty"`
 	Name         string `json:"name" binding:"required"`
 	Description  string `json:"description"`
 	Sort         int    `json:"sort"`
 	ProductCount int64  `json:"productCount,omitempty"`
 	CreateTime   string `json:"createTime,omitempty"`
+}
+
+type KeywordProductIDsRequest struct {
+	ProductIDs []uint64 `json:"productIds"`
 }

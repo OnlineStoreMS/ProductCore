@@ -145,8 +145,8 @@ func walkBoxes(r io.Reader, limit int64, fn func(boxType string, payload []byte)
 	return nil
 }
 
-// MatchVideoRatio 校验视频宽高比是否为 1:1 或 3:4
-func MatchVideoRatio(width, height int) (string, error) {
+// DetectVideoRatio 识别视频宽高比：1:1 / 3:4 / 16:9 / 9:16
+func DetectVideoRatio(width, height int) (string, error) {
 	if width <= 0 || height <= 0 {
 		return "", errors.New("无法读取视频尺寸")
 	}
@@ -157,11 +157,25 @@ func MatchVideoRatio(width, height int) (string, error) {
 	}{
 		{"1:1", 1.0},
 		{"3:4", 0.75},
+		{"16:9", 16.0 / 9.0},
+		{"9:16", 9.0 / 16.0},
 	}
+	bestLabel := ""
+	bestRel := math.MaxFloat64
 	for _, t := range targets {
-		if math.Abs(actual-t.ratio)/t.ratio <= aspectTolerance {
-			return t.label, nil
+		rel := math.Abs(actual-t.ratio) / t.ratio
+		if rel <= aspectTolerance && rel < bestRel {
+			bestRel = rel
+			bestLabel = t.label
 		}
 	}
-	return "", fmt.Errorf("视频宽高比需为 1:1 或 3:4（当前 %d×%d）", width, height)
+	if bestLabel != "" {
+		return bestLabel, nil
+	}
+	return "", fmt.Errorf("视频宽高比需为 1:1、3:4、16:9 或 9:16（当前 %d×%d）", width, height)
+}
+
+// MatchVideoRatio 兼容旧调用：识别主图/商品视频支持的比例。
+func MatchVideoRatio(width, height int) (string, error) {
+	return DetectVideoRatio(width, height)
 }

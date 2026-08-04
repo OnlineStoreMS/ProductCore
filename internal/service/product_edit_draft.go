@@ -107,6 +107,12 @@ func (s *ProductService) applyProductUpdate(tx *repo.ProductRepo, id uint64, in 
 	if err := svc.saveGroups(tx, id, in.GroupIDs); err != nil {
 		return nil, err
 	}
+	if err := tx.DeleteKeywordRelations(id); err != nil {
+		return nil, err
+	}
+	if err := svc.saveKeywords(tx, id, in.KeywordIDs); err != nil {
+		return nil, err
+	}
 	if err := svc.syncSummary(tx, id); err != nil {
 		return nil, err
 	}
@@ -150,6 +156,12 @@ func (s *ProductService) updateDraftBoxAutoSave(tx *repo.ProductRepo, id uint64,
 		return nil, err
 	}
 	if err := svc.saveGroups(tx, id, in.GroupIDs); err != nil {
+		return nil, err
+	}
+	if err := tx.DeleteKeywordRelations(id); err != nil {
+		return nil, err
+	}
+	if err := svc.saveKeywords(tx, id, in.KeywordIDs); err != nil {
 		return nil, err
 	}
 	return svc.loadDTO(tx, id)

@@ -71,6 +71,18 @@ type ProductGroupResp struct {
 	Data    dto.ProductGroupDTO  `json:"data"`
 }
 
+type ProductKeywordListResp struct {
+	Code    int                     `json:"code" example:"200"`
+	Message string                  `json:"message" example:"success"`
+	Data    []dto.ProductKeywordDTO `json:"data"`
+}
+
+type ProductKeywordResp struct {
+	Code    int                   `json:"code" example:"200"`
+	Message string                `json:"message" example:"success"`
+	Data    dto.ProductKeywordDTO `json:"data"`
+}
+
 type ListedShopListResp struct {
 	Code    int                 `json:"code" example:"200"`
 	Message string              `json:"message" example:"success"`

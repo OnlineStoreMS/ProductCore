@@ -21,10 +21,22 @@ export interface Category {
 
 export interface ProductGroup {
   id: number
+  parentId: number
   name: string
   description: string
+  level: number
   productCount: number
   sort: number
+  createTime: string
+  children?: ProductGroup[]
+}
+
+export interface ProductKeyword {
+  id: number
+  name: string
+  description: string
+  sort: number
+  productCount: number
   createTime: string
 }
 
@@ -103,6 +115,7 @@ export interface Product {
   categoryId: number
   categoryName: string
   groupIds: number[]
+  keywordIds: number[]
   pic: string
   albumPics: string[]
   productVideo?: string

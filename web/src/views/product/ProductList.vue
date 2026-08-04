@@ -11,12 +11,13 @@ import {
   deleteProduct,
   fetchBrands,
   fetchCategoryTree,
-  fetchGroups,
+  fetchGroupTree,
+  fetchKeywords,
   fetchProducts,
   exportProduct,
   updateProductPublishStatus,
 } from '../../api/product'
-import type { Brand, Category, ListedShop, Product, ProductGroup, ProductSkus } from '../../types/product'
+import type { Brand, Category, ListedShop, Product, ProductGroup, ProductKeyword, ProductSkus } from '../../types/product'
 
 const router = useRouter()
 const loading = ref(false)
@@ -25,6 +26,7 @@ const total = ref(0)
 const brands = ref<Brand[]>([])
 const categories = ref<Category[]>([])
 const productGroups = ref<ProductGroup[]>([])
+const productKeywords = ref<ProductKeyword[]>([])
 
 const query = ref({
   keyword: '',
@@ -32,6 +34,7 @@ const query = ref({
   categoryId: undefined as number | undefined,
   publishStatus: undefined as number | undefined,
   groupId: undefined as number | undefined,
+  keywordId: undefined as number | undefined,
   page: 1,
   pageSize: 10,
 })
@@ -48,11 +51,29 @@ const categoryOptions = computed(() => {
   return flat
 })
 
+const groupOptions = computed(() => {
+  const flat: { id: number; name: string }[] = []
+  function walk(list: ProductGroup[], prefix = '') {
+    for (const g of list) {
+      flat.push({ id: g.id, name: prefix + g.name })
+      if (g.children?.length) walk(g.children, prefix + g.name + ' / ')
+    }
+  }
+  walk(productGroups.value)
+  return flat
+})
+
 async function loadMeta() {
-  const [b, c, g] = await Promise.all([fetchBrands(), fetchCategoryTree(), fetchGroups()])
+  const [b, c, g, k] = await Promise.all([
+    fetchBrands(),
+    fetchCategoryTree(),
+    fetchGroupTree(),
+    fetchKeywords(),
+  ])
   brands.value = b
   categories.value = c
   productGroups.value = g
+  productKeywords.value = k
 }
 
 async function loadData() {
@@ -63,6 +84,7 @@ async function loadData() {
       brandId: query.value.brandId,
       categoryId: query.value.categoryId,
       groupId: query.value.groupId,
+      keywordId: query.value.keywordId,
       publishStatus: query.value.publishStatus,
       page: query.value.page,
       pageSize: query.value.pageSize,
@@ -198,8 +220,13 @@ function onListingSaved(productId: number, shops: ListedShop[]) {
           </el-select>
         </el-form-item>
         <el-form-item label="分组">
-          <el-select v-model="query.groupId" placeholder="全部" clearable style="width: 140px">
-            <el-option v-for="g in productGroups" :key="g.id" :label="g.name" :value="g.id" />
+          <el-select v-model="query.groupId" placeholder="全部" clearable style="width: 180px">
+            <el-option v-for="g in groupOptions" :key="g.id" :label="g.name" :value="g.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关键词">
+          <el-select v-model="query.keywordId" placeholder="全部" clearable filterable style="width: 160px">
+            <el-option v-for="k in productKeywords" :key="k.id" :label="k.name" :value="k.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="上架状态">

@@ -67,7 +67,11 @@ func HandleServiceError(c *gin.Context, err error) {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 	default:
 		if err.Error() == "category has children" {
-			response.Fail(c, http.StatusBadRequest, err.Error())
+			response.Fail(c, http.StatusBadRequest, "请先删除子分类")
+			return
+		}
+		if err.Error() == "group has children" {
+			response.Fail(c, http.StatusBadRequest, "请先删除子分组")
 			return
 		}
 		response.Fail(c, http.StatusInternalServerError, err.Error())

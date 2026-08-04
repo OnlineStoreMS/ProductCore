@@ -31,6 +31,7 @@ const router = createRouter({
         { path: 'categories', name: 'CategoryList', component: () => import('../views/category/CategoryList.vue'), meta: { title: '商品分类' } },
         { path: 'brands', name: 'BrandList', component: () => import('../views/brand/BrandList.vue'), meta: { title: '品牌管理' } },
         { path: 'groups', name: 'ProductGroupList', component: () => import('../views/group/ProductGroupList.vue'), meta: { title: '商品分组' } },
+        { path: 'keywords', name: 'ProductKeywordList', component: () => import('../views/keyword/ProductKeywordList.vue'), meta: { title: '关键词管理' } },
         { path: 'platform-types', name: 'PlatformTypeList', component: () => import('../views/platform/PlatformTypeList.vue'), meta: { title: '店铺类型' } },
         { path: 'platform-shops', name: 'PlatformShopList', component: () => import('../views/platform/PlatformShopList.vue'), meta: { title: '店铺管理' } },
       ],

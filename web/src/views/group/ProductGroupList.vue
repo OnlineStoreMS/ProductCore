@@ -6,12 +6,12 @@ import {
   createGroup,
   deleteGroup,
   fetchGroupProducts,
-  fetchGroups,
+  fetchGroupTree,
   updateGroup,
 } from '../../api/product'
 import type { Product, ProductGroup } from '../../types/product'
 
-const tableData = ref<ProductGroup[]>([])
+const treeData = ref<ProductGroup[]>([])
 const loading = ref(false)
 const dialogVisible = ref(false)
 const editing = ref<Partial<ProductGroup>>({})
@@ -20,7 +20,7 @@ const popoverProducts = ref<Product[]>([])
 async function loadData() {
   loading.value = true
   try {
-    tableData.value = await fetchGroups()
+    treeData.value = await fetchGroupTree()
   } catch (e) {
     ElMessage.error((e as Error).message || '加载失败')
   } finally {
@@ -30,8 +30,13 @@ async function loadData() {
 
 onMounted(loadData)
 
-function handleAdd() {
-  editing.value = { name: '', description: '', sort: 0 }
+function handleAdd(parent?: ProductGroup) {
+  editing.value = {
+    parentId: parent?.id ?? 0,
+    name: '',
+    description: '',
+    sort: 0,
+  }
   dialogVisible.value = true
 }
 
@@ -79,43 +84,54 @@ async function loadGroupProducts(groupId: number) {
     <el-card v-loading="loading">
       <template #header>
         <span>商品分组</span>
-        <el-button type="primary" :icon="Plus" @click="handleAdd">新建分组</el-button>
+        <el-button type="primary" :icon="Plus" @click="handleAdd()">新建一级分组</el-button>
       </template>
 
-      <el-table :data="tableData" stripe border>
-        <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column prop="name" label="分组名称" min-width="140" />
-        <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="productCount" label="商品数" width="90" align="center" />
-        <el-table-column prop="sort" label="排序" width="80" align="center" />
-        <el-table-column prop="createTime" label="创建时间" width="160" />
-        <el-table-column label="操作" width="180">
-          <template #default="{ row }">
-            <el-popover placement="left" :width="320" trigger="click" @show="loadGroupProducts(row.id)">
-              <template #reference>
-                <el-button type="primary" link :icon="View">查看商品</el-button>
-              </template>
-              <div class="popover-products">
-                <div v-for="p in popoverProducts" :key="p.id" class="pop-item">
-                  <el-image :src="p.pic" class="pop-thumb" fit="cover" />
-                  <span>{{ p.name }}</span>
+      <el-tree
+        :data="treeData"
+        :props="{ label: 'name', children: 'children' }"
+        default-expand-all
+        node-key="id"
+        highlight-current
+      >
+        <template #default="{ node, data }">
+          <div class="tree-node">
+            <span class="node-label">
+              {{ node.label }}
+              <span v-if="data.description" class="node-desc">{{ data.description }}</span>
+            </span>
+            <span class="node-meta">
+              <el-tag size="small" type="info">{{ data.productCount }} 件</el-tag>
+              <el-popover placement="left" :width="320" trigger="click" @show="loadGroupProducts(data.id)">
+                <template #reference>
+                  <el-button type="primary" link size="small" :icon="View" @click.stop>商品</el-button>
+                </template>
+                <div class="popover-products">
+                  <div v-for="p in popoverProducts" :key="p.id" class="pop-item">
+                    <el-image :src="p.pic" class="pop-thumb" fit="cover" />
+                    <span>{{ p.name }}</span>
+                  </div>
+                  <el-empty v-if="!popoverProducts.length" description="暂无商品" :image-size="60" />
                 </div>
-                <el-empty v-if="!popoverProducts.length" description="暂无商品" :image-size="60" />
-              </div>
-            </el-popover>
-            <el-button type="primary" link :icon="Edit" @click="handleEdit(row)">编辑</el-button>
-            <el-popconfirm title="确定删除？" @confirm="handleDelete(row)">
-              <template #reference>
-                <el-button type="danger" link :icon="Delete">删除</el-button>
-              </template>
-            </el-popconfirm>
-          </template>
-        </el-table-column>
-      </el-table>
+              </el-popover>
+              <el-button type="primary" link size="small" :icon="Plus" @click.stop="handleAdd(data)" />
+              <el-button type="primary" link size="small" :icon="Edit" @click.stop="handleEdit(data)" />
+              <el-popconfirm title="确定删除？" @confirm="handleDelete(data)">
+                <template #reference>
+                  <el-button type="danger" link size="small" :icon="Delete" @click.stop />
+                </template>
+              </el-popconfirm>
+            </span>
+          </div>
+        </template>
+      </el-tree>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" title="编辑分组" width="480px">
-      <el-form :model="editing" label-width="80px">
+    <el-dialog v-model="dialogVisible" :title="editing.id ? '编辑分组' : '新建分组'" width="480px">
+      <el-form :model="editing" label-width="90px">
+        <el-form-item v-if="!editing.id && editing.parentId" label="上级分组">
+          <el-tag type="info">子分组</el-tag>
+        </el-form-item>
         <el-form-item label="分组名称">
           <el-input v-model="editing.name" />
         </el-form-item>
@@ -135,6 +151,39 @@ async function loadGroupProducts(groupId: number) {
 </template>
 
 <style scoped>
+.tree-node {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 8px;
+  font-size: 14px;
+  gap: 12px;
+}
+
+.node-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.node-desc {
+  color: #94a3b8;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 280px;
+}
+
+.node-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .popover-products {
   max-height: 240px;
   overflow-y: auto;
@@ -160,5 +209,9 @@ async function loadGroupProducts(groupId: number) {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+:deep(.el-tree-node__content) {
+  height: 40px;
 }
 </style>

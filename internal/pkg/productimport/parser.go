@@ -47,7 +47,7 @@ type ParsedPackage struct {
 
 type ParsedVideo struct {
 	Path  string
-	Ratio string // 1:1 or 3:4
+	Ratio string // 1:1 / 3:4 / 16:9 / 9:16
 }
 
 type ParsedSku struct {

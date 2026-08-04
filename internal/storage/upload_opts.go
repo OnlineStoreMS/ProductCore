@@ -166,9 +166,9 @@ func productResourceSegments(opts UploadOptions) []string {
 		return []string{"videos", "ratio11"}
 	case "video_34", "import_video_34":
 		return []string{"videos", "ratio34"}
-	case "video_169":
+	case "video_169", "import_video_169":
 		return []string{"videos", "ratio169"}
-	case "video_916":
+	case "video_916", "import_video_916":
 		return []string{"videos", "ratio916"}
 	case "spec", "sku_spec", "import_sku":
 		return []string{"specs"}

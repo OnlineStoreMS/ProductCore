@@ -10,11 +10,12 @@ import {
   createDraftProduct,
   fetchBrands,
   fetchCategoryTree,
-  fetchGroups,
+  fetchGroupTree,
+  fetchKeywords,
   fetchProduct,
   updateProduct,
 } from '../../api/product'
-import type { Category, ProductForm, ProductMedia, SkuItem, SkuSpec } from '../../types/product'
+import type { Category, ProductForm, ProductGroup, ProductKeyword, ProductMedia, SkuItem, SkuSpec } from '../../types/product'
 import { compactSkuSpecs, defaultSkuSpecEditorState, normalizeSkuSpecsForEditor, spuWeightFromSkus, validateSkuSpecsNoDuplicateNames, validateSkuSpecsNoDuplicateValues } from '../../types/product'
 import { isValidSkuCode } from '../../utils/skuCode'
 import { MEDIA_UPLOAD_RULES } from '../../utils/uploadValidate'
@@ -58,7 +59,8 @@ const showRichDetail = ref(false)
 
 const brands = ref<{ id: number; name: string }[]>([])
 const categories = ref<Category[]>([])
-const productGroups = ref<{ id: number; name: string }[]>([])
+const productGroups = ref<ProductGroup[]>([])
+const productKeywords = ref<ProductKeyword[]>([])
 
 const form = ref<ProductForm>({
   name: '',
@@ -69,6 +71,7 @@ const form = ref<ProductForm>({
   brandId: NONE_BRAND_ID,
   categoryId: NONE_CATEGORY_ID,
   groupIds: [],
+  keywordIds: [],
   pic: '',
   albumPics: [],
   price: 0,
@@ -127,6 +130,18 @@ const categoryOptions = computed(() => {
     }
   }
   walk(categories.value)
+  return flat
+})
+
+const groupOptions = computed(() => {
+  const flat: { id: number; name: string }[] = []
+  function walk(list: ProductGroup[], prefix = '') {
+    for (const g of list) {
+      flat.push({ id: g.id, name: prefix + g.name })
+      if (g.children?.length) walk(g.children, prefix + g.name + ' / ')
+    }
+  }
+  walk(productGroups.value)
   return flat
 })
 
@@ -261,10 +276,16 @@ function applyMedia(media?: ProductMedia) {
 }
 
 async function loadMeta() {
-  const [b, c, g] = await Promise.all([fetchBrands(), fetchCategoryTree(), fetchGroups()])
+  const [b, c, g, k] = await Promise.all([
+    fetchBrands(),
+    fetchCategoryTree(),
+    fetchGroupTree(),
+    fetchKeywords(),
+  ])
   brands.value = b
   categories.value = c
   productGroups.value = g
+  productKeywords.value = k
 }
 
 async function loadProduct() {
@@ -288,6 +309,7 @@ async function loadProduct() {
       brandId: product.brandId || NONE_BRAND_ID,
       categoryId: product.categoryId || NONE_CATEGORY_ID,
       groupIds: product.groupIds || [],
+      keywordIds: product.keywordIds || [],
       pic: product.pic,
       albumPics: product.albumPics || [],
       productVideo: product.productVideo,
@@ -360,6 +382,7 @@ watch(
       brandId: form.value.brandId,
       categoryId: form.value.categoryId,
       groupIds: form.value.groupIds,
+      keywordIds: form.value.keywordIds,
       pic: form.value.pic,
       albumPics: form.value.albumPics,
       unit: form.value.unit,
@@ -402,6 +425,7 @@ function captureEditSnapshot(): string {
     brandId: f.brandId,
     categoryId: f.categoryId,
     groupIds: f.groupIds,
+    keywordIds: f.keywordIds,
     pic: f.pic,
     albumPics: f.albumPics,
     unit: f.unit,
@@ -690,7 +714,19 @@ function scrollTo(href: string) {
             <div class="form-line form-line-full">
               <label class="form-label">商品分组</label>
               <el-select v-model="form.groupIds" multiple placeholder="请选择" class="form-control">
-                <el-option v-for="g in productGroups" :key="g.id" :label="g.name" :value="g.id" />
+                <el-option v-for="g in groupOptions" :key="g.id" :label="g.name" :value="g.id" />
+              </el-select>
+            </div>
+            <div class="form-line form-line-full">
+              <label class="form-label">关键词</label>
+              <el-select
+                v-model="form.keywordIds"
+                multiple
+                filterable
+                placeholder="请选择"
+                class="form-control"
+              >
+                <el-option v-for="k in productKeywords" :key="k.id" :label="k.name" :value="k.id" />
               </el-select>
             </div>
             <div class="form-line form-line-inline">

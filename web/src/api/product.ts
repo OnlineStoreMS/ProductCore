@@ -1,11 +1,12 @@
 import client, { parseContentDispositionFilename, unwrap, type PageData } from './client'
-import type { Brand, Category, ListedShop, Product, ProductForm, ProductGroup, ProductSkus, SkuItem, SkuSpec } from '../types/product'
+import type { Brand, Category, ListedShop, Product, ProductForm, ProductGroup, ProductKeyword, ProductSkus, SkuItem, SkuSpec } from '../types/product'
 
 export interface ProductQuery {
   keyword?: string
   brandId?: number
   categoryId?: number
   groupId?: number
+  keywordId?: number
   publishStatus?: number
   page?: number
   pageSize?: number
@@ -183,6 +184,11 @@ export async function fetchGroups() {
   return unwrap<ProductGroup[]>(res)
 }
 
+export async function fetchGroupTree() {
+  const res = await client.get('/groups/tree')
+  return unwrap<ProductGroup[]>(res)
+}
+
 export async function fetchGroupProducts(groupId: number) {
   const res = await client.get(`/groups/${groupId}/products`)
   return unwrap<Product[]>(res)
@@ -200,6 +206,42 @@ export async function updateGroup(id: number, data: Partial<ProductGroup>) {
 
 export async function deleteGroup(id: number) {
   await client.delete(`/groups/${id}`)
+}
+
+export async function fetchKeywords() {
+  const res = await client.get('/keywords')
+  return unwrap<ProductKeyword[]>(res)
+}
+
+export async function createKeyword(data: Partial<ProductKeyword>) {
+  const res = await client.post('/keywords', data)
+  return unwrap<ProductKeyword>(res)
+}
+
+export async function updateKeyword(id: number, data: Partial<ProductKeyword>) {
+  const res = await client.put(`/keywords/${id}`, data)
+  return unwrap<ProductKeyword>(res)
+}
+
+export async function deleteKeyword(id: number) {
+  await client.delete(`/keywords/${id}`)
+}
+
+export async function fetchKeywordProducts(keywordId: number) {
+  const res = await client.get(`/keywords/${keywordId}/products`)
+  return unwrap<Product[]>(res)
+}
+
+export async function setKeywordProducts(keywordId: number, productIds: number[]) {
+  await client.put(`/keywords/${keywordId}/products`, { productIds })
+}
+
+export async function addKeywordProducts(keywordId: number, productIds: number[]) {
+  await client.post(`/keywords/${keywordId}/products`, { productIds })
+}
+
+export async function removeKeywordProduct(keywordId: number, productId: number) {
+  await client.delete(`/keywords/${keywordId}/products/${productId}`)
 }
 
 export async function fetchDashboardStats() {

@@ -4,12 +4,13 @@ import "gorm.io/gorm"
 
 // Repos 聚合数据访问层（对应 TECH_STACK internal/repo）
 type Repos struct {
-	Product      *ProductRepo
-	Brand        *BrandRepo
-	Category     *CategoryRepo
-	Group        *GroupRepo
-	PlatformType   *PlatformTypeRepo
-	PlatformShop   *PlatformShopRepo
+	Product         *ProductRepo
+	Brand           *BrandRepo
+	Category        *CategoryRepo
+	Group           *GroupRepo
+	Keyword         *KeywordRepo
+	PlatformType    *PlatformTypeRepo
+	PlatformShop    *PlatformShopRepo
 	PlatformListing *PlatformListingRepo
 }
 
@@ -19,6 +20,7 @@ func New(db *gorm.DB) *Repos {
 		Brand:           NewBrandRepo(db),
 		Category:        NewCategoryRepo(db),
 		Group:           NewGroupRepo(db),
+		Keyword:         NewKeywordRepo(db),
 		PlatformType:    NewPlatformTypeRepo(db),
 		PlatformShop:    NewPlatformShopRepo(db),
 		PlatformListing: NewPlatformListingRepo(db),

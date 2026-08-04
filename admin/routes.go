@@ -9,6 +9,7 @@ func RegisterRoutes(
 	brandH *BrandHandler,
 	categoryH *CategoryHandler,
 	groupH *GroupHandler,
+	keywordH *KeywordHandler,
 	uploadH *UploadHandler,
 	importH *ProductImportHandler,
 	platformTypeH *PlatformTypeHandler,
@@ -48,10 +49,20 @@ func RegisterRoutes(
 	g.DELETE("/categories/:id", categoryH.Delete)
 
 	g.GET("/groups", groupH.List)
+	g.GET("/groups/tree", groupH.Tree)
 	g.GET("/groups/:id/products", groupH.Products)
 	g.POST("/groups", groupH.Create)
 	g.PUT("/groups/:id", groupH.Update)
 	g.DELETE("/groups/:id", groupH.Delete)
+
+	g.GET("/keywords", keywordH.List)
+	g.GET("/keywords/:id/products", keywordH.Products)
+	g.PUT("/keywords/:id/products", keywordH.SetProducts)
+	g.POST("/keywords/:id/products", keywordH.AddProducts)
+	g.DELETE("/keywords/:id/products/:productId", keywordH.RemoveProduct)
+	g.POST("/keywords", keywordH.Create)
+	g.PUT("/keywords/:id", keywordH.Update)
+	g.DELETE("/keywords/:id", keywordH.Delete)
 
 	g.POST("/upload", uploadH.Upload)
 	g.POST("/upload/batch", uploadH.UploadBatch)

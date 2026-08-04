@@ -154,6 +154,12 @@ func (r *GroupRepo) Delete(tenantID, id uint64) error {
 	return nil
 }
 
+func (r *GroupRepo) CountChildren(tenantID, parentID uint64) (int64, error) {
+	var n int64
+	err := r.db.Scopes(scopeTenant(tenantID)).Model(&model.ProductGroup{}).Where("parent_id = ?", parentID).Count(&n).Error
+	return n, err
+}
+
 func (r *GroupRepo) CountProducts(tenantID, groupID uint64) (int64, error) {
 	var n int64
 	err := r.db.Model(&model.ProductGroupRelation{}).Where("group_id = ?", groupID).Count(&n).Error
@@ -164,6 +170,31 @@ func (r *GroupRepo) ListProductIDs(tenantID, groupID uint64) ([]uint64, error) {
 	var ids []uint64
 	err := r.db.Model(&model.ProductGroupRelation{}).Where("group_id = ?", groupID).Pluck("product_id", &ids).Error
 	return ids, err
+}
+
+// ListSelfAndDescendantIDs 返回分组自身及其全部子孙 ID（用于商品列表按父分组筛选）。
+func (r *GroupRepo) ListSelfAndDescendantIDs(tenantID, rootID uint64) ([]uint64, error) {
+	if rootID == 0 {
+		return nil, nil
+	}
+	all, err := r.List(tenantID)
+	if err != nil {
+		return nil, err
+	}
+	children := map[uint64][]uint64{}
+	for _, g := range all {
+		children[g.ParentID] = append(children[g.ParentID], g.ID)
+	}
+	out := make([]uint64, 0, 8)
+	var walk func(id uint64)
+	walk = func(id uint64) {
+		out = append(out, id)
+		for _, childID := range children[id] {
+			walk(childID)
+		}
+	}
+	walk(rootID)
+	return out, nil
 }
 
 func (r *BrandRepo) GetName(id uint64) string {

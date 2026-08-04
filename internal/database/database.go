@@ -45,6 +45,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.Product{},
 		&model.Sku{},
 		&model.ProductGroupRelation{},
+		&model.ProductKeyword{},
+		&model.ProductKeywordRelation{},
 		&model.PlatformShopType{},
 		&model.PlatformShop{},
 		&model.PlatformListing{},

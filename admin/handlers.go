@@ -2,6 +2,7 @@ package admin
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"productcore/internal/dto"
@@ -780,6 +781,23 @@ func (h *GroupHandler) List(c *gin.Context) {
 	response.OK(c, list)
 }
 
+// Tree godoc
+//
+//	@Summary		商品分组树
+//	@Tags			admin-分组
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	response.ProductGroupListResp
+//	@Router			/admin/groups/tree [get]
+func (h *GroupHandler) Tree(c *gin.Context) {
+	list, err := h.gs(c).Tree()
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, list)
+}
+
 // Create godoc
 //
 //	@Summary		创建商品分组
@@ -877,4 +895,218 @@ func (h *GroupHandler) Products(c *gin.Context) {
 		return
 	}
 	response.OK(c, list)
+}
+
+type KeywordHandler struct {
+	svc *service.ProductKeywordService
+}
+
+func NewKeywordHandler(svc *service.ProductKeywordService) *KeywordHandler {
+	return &KeywordHandler{svc: svc}
+}
+
+func (h *KeywordHandler) ks(c *gin.Context) *service.ProductKeywordService {
+	return h.svc.ForTenant(authcontext.TenantID(c))
+}
+
+// List godoc
+//
+//	@Summary		关键词列表
+//	@Tags			admin-关键词
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	response.ProductKeywordListResp
+//	@Router			/admin/keywords [get]
+func (h *KeywordHandler) List(c *gin.Context) {
+	list, err := h.ks(c).List()
+	if err != nil {
+		response.Fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response.OK(c, list)
+}
+
+// Create godoc
+//
+//	@Summary		创建关键词
+//	@Tags			admin-关键词
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		dto.ProductKeywordDTO	true	"关键词"
+//	@Success		201		{object}	response.ProductKeywordResp
+//	@Router			/admin/keywords [post]
+func (h *KeywordHandler) Create(c *gin.Context) {
+	var in dto.ProductKeywordDTO
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	item, err := h.ks(c).Create(&in)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.Created(c, item)
+}
+
+// Update godoc
+//
+//	@Summary		更新关键词
+//	@Tags			admin-关键词
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		int						true	"关键词 ID"
+//	@Param			body	body		dto.ProductKeywordDTO	true	"关键词"
+//	@Success		200		{object}	response.ProductKeywordResp
+//	@Router			/admin/keywords/{id} [put]
+func (h *KeywordHandler) Update(c *gin.Context) {
+	id, err := httputil.ParseID(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var in dto.ProductKeywordDTO
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	item, err := h.ks(c).Update(id, &in)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, item)
+}
+
+// Delete godoc
+//
+//	@Summary		删除关键词
+//	@Tags			admin-关键词
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path	int	true	"关键词 ID"
+//	@Success		200	{object}	response.EmptyResp
+//	@Router			/admin/keywords/{id} [delete]
+func (h *KeywordHandler) Delete(c *gin.Context) {
+	id, err := httputil.ParseID(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if err := h.ks(c).Delete(id); err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, nil)
+}
+
+// Products godoc
+//
+//	@Summary		关键词下商品列表
+//	@Tags			admin-关键词
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path	int	true	"关键词 ID"
+//	@Success		200	{object}	response.ProductPageResp
+//	@Router			/admin/keywords/{id}/products [get]
+func (h *KeywordHandler) Products(c *gin.Context) {
+	id, err := httputil.ParseID(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	list, err := h.ks(c).ListProducts(id)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, list)
+}
+
+// SetProducts godoc
+//
+//	@Summary		设置关键词关联商品（全量替换）
+//	@Tags			admin-关键词
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path	int							true	"关键词 ID"
+//	@Param			body	body	dto.KeywordProductIDsRequest	true	"商品 ID 列表"
+//	@Success		200		{object}	response.EmptyResp
+//	@Router			/admin/keywords/{id}/products [put]
+func (h *KeywordHandler) SetProducts(c *gin.Context) {
+	id, err := httputil.ParseID(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var in dto.KeywordProductIDsRequest
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.ks(c).SetProducts(id, in.ProductIDs); err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, nil)
+}
+
+// AddProducts godoc
+//
+//	@Summary		向关键词追加商品
+//	@Tags			admin-关键词
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path	int							true	"关键词 ID"
+//	@Param			body	body	dto.KeywordProductIDsRequest	true	"商品 ID 列表"
+//	@Success		200		{object}	response.EmptyResp
+//	@Router			/admin/keywords/{id}/products [post]
+func (h *KeywordHandler) AddProducts(c *gin.Context) {
+	id, err := httputil.ParseID(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var in dto.KeywordProductIDsRequest
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.ks(c).AddProducts(id, in.ProductIDs); err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, nil)
+}
+
+// RemoveProduct godoc
+//
+//	@Summary		从关键词移除商品
+//	@Tags			admin-关键词
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id			path	int	true	"关键词 ID"
+//	@Param			productId	path	int	true	"商品 ID"
+//	@Success		200			{object}	response.EmptyResp
+//	@Router			/admin/keywords/{id}/products/{productId} [delete]
+func (h *KeywordHandler) RemoveProduct(c *gin.Context) {
+	id, err := httputil.ParseID(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	productID, err := strconv.ParseUint(c.Param("productId"), 10, 64)
+	if err != nil || productID == 0 {
+		response.Fail(c, http.StatusBadRequest, "invalid productId")
+		return
+	}
+	if err := h.ks(c).RemoveProduct(id, productID); err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, nil)
 }

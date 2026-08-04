@@ -57,6 +57,16 @@ func (s *ProductService) List(q dto.ProductQuery) ([]dto.ProductDTO, int64, erro
 			q.CategoryID = 0
 		}
 	}
+	if q.GroupID > 0 && len(q.GroupIDs) == 0 {
+		ids, err := s.meta.Group.ListSelfAndDescendantIDs(s.tenantID, q.GroupID)
+		if err != nil {
+			return nil, 0, err
+		}
+		if len(ids) > 0 {
+			q.GroupIDs = ids
+			q.GroupID = 0
+		}
+	}
 	products, total, err := s.repo.List(q)
 	if err != nil {
 		return nil, 0, err
@@ -150,6 +160,9 @@ func (s *ProductService) Create(in *dto.ProductDTO) (*dto.ProductDTO, error) {
 			return err
 		}
 		if err := svc.saveGroups(tx, p.ID, in.GroupIDs); err != nil {
+			return err
+		}
+		if err := svc.saveKeywords(tx, p.ID, in.KeywordIDs); err != nil {
 			return err
 		}
 		if err := svc.syncSummary(tx, p.ID); err != nil {
@@ -338,6 +351,9 @@ func (s *ProductService) ForceDelete(id uint64) error {
 			return err
 		}
 		if err := tx.DeleteGroupRelations(id); err != nil {
+			return err
+		}
+		if err := tx.DeleteKeywordRelations(id); err != nil {
 			return err
 		}
 		if err := s.meta.PlatformListing.DeleteByProduct(id); err != nil {
@@ -789,6 +805,18 @@ func (s *ProductService) saveGroups(tx *repo.ProductRepo, productID uint64, grou
 	return nil
 }
 
+func (s *ProductService) saveKeywords(tx *repo.ProductRepo, productID uint64, keywordIDs []uint64) error {
+	for _, kid := range keywordIDs {
+		if kid == 0 {
+			continue
+		}
+		if err := tx.CreateKeywordRelation(productID, kid); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *ProductService) syncSummary(tx *repo.ProductRepo, productID uint64) error {
 	skus, err := tx.ListSkus(productID)
 	if err != nil {
@@ -899,6 +927,8 @@ func (s *ProductService) toDTO(p *model.Product, withSkus bool) (*dto.ProductDTO
 	}
 	groupIDs, _ := s.repo.ListGroupIDs(p.ID)
 	out.GroupIDs = groupIDs
+	keywordIDs, _ := s.repo.ListKeywordIDs(p.ID)
+	out.KeywordIDs = keywordIDs
 	skuCount, _ := s.repo.CountSkus(p.ID)
 	out.SkuCount = int(skuCount)
 	if withSkus {

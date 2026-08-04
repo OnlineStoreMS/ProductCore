@@ -2,8 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { View } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { fetchGroups, fetchProduct } from '../../api/product'
-import type { Product, ProductGroup, SkuItem, SkuSpec } from '../../types/product'
+import { fetchGroups, fetchKeywords, fetchProduct } from '../../api/product'
+import type { Product, ProductGroup, ProductKeyword, SkuItem, SkuSpec } from '../../types/product'
 import { spuWeightFromSkus } from '../../types/product'
 import { colWidthFromTexts, priceColWidth } from '../../utils/tableColWidth'
 
@@ -19,6 +19,7 @@ const emit = defineEmits<{
 const loading = ref(false)
 const product = ref<Product | null>(null)
 const groups = ref<ProductGroup[]>([])
+const keywords = ref<ProductKeyword[]>([])
 
 const visible = computed({
   get: () => props.modelValue,
@@ -29,6 +30,12 @@ const groupNames = computed(() => {
   if (!product.value?.groupIds?.length) return '-'
   const map = new Map(groups.value.map((g) => [g.id, g.name]))
   return product.value.groupIds.map((id) => map.get(id) || `#${id}`).join('、') || '-'
+})
+
+const keywordNames = computed(() => {
+  if (!product.value?.keywordIds?.length) return '-'
+  const map = new Map(keywords.value.map((k) => [k.id, k.name]))
+  return product.value.keywordIds.map((id) => map.get(id) || `#${id}`).join('、') || '-'
 })
 
 const displayWeight = computed(() => {
@@ -128,12 +135,14 @@ async function loadDetail() {
   loading.value = true
   product.value = null
   try {
-    const [p, g] = await Promise.all([
+    const [p, g, k] = await Promise.all([
       fetchProduct(props.productId),
       groups.value.length ? Promise.resolve(groups.value) : fetchGroups(),
+      keywords.value.length ? Promise.resolve(keywords.value) : fetchKeywords(),
     ])
     product.value = p
     if (!groups.value.length) groups.value = g
+    if (!keywords.value.length) keywords.value = k
   } catch (e) {
     ElMessage.error((e as Error).message || '加载商品详情失败')
     visible.value = false
@@ -183,6 +192,7 @@ watch(
               <el-descriptions-item label="品牌">{{ product.brandName || '-' }}</el-descriptions-item>
               <el-descriptions-item label="分类">{{ product.categoryName || '-' }}</el-descriptions-item>
               <el-descriptions-item label="分组" :span="2">{{ groupNames }}</el-descriptions-item>
+              <el-descriptions-item label="关键词" :span="2">{{ keywordNames }}</el-descriptions-item>
               <el-descriptions-item label="单位">{{ product.unit || '-' }}</el-descriptions-item>
               <el-descriptions-item label="排序">{{ product.sort ?? 0 }}</el-descriptions-item>
               <el-descriptions-item label="上架状态">
