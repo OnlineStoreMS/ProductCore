@@ -32,9 +32,10 @@
 
 ### 2.1 自营订单（self）
 
-- 来源：OrderCore 中 `alloc_type=self_ship` 等自营履约订单（只读聚合 + 跟单备注）
-- 用途：自营中心工作台查看、补录物流、对账入口
-- MVP：列表骨架 + 外链 OrderCore 详情；深度履约仍在 OrderCore / ShippingCore
+- 来源：订单中心分配 `alloc_type=self_ship` 时 **自动创建** SelfCore 本地自营单（`self_orders`）；不含待分配（如「待推单 · 自营」）
+- 单据：基本信息 + 商品明细（绑定仓储库存 SKU / 成本）+ 物流；详情为本中心页面，非订单中心外链
+- 发货：本地登记物流 → **回传订单中心（电商）** → 扣 WarehouseCore 库存（`sale_out`）；回传失败保留本地可重试；扣库失败可重试；ShippingCore 同步预留
+- 对端：仓储中心（非供应商）
 
 ### 2.2 分销订单（distributor）
 
@@ -76,7 +77,7 @@
 
 ```
 工作台
-自营订单（骨架，对接 OrderCore）
+自营订单（本地单据，self_ship 自动建单）
 分销订单
   全部订单 / 代发订单 / 批发订单
 分销商
