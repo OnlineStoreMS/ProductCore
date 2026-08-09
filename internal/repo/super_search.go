@@ -43,8 +43,10 @@ func (r *ProductRepo) searchSkus(keyword string, page, pageSize int) ([]SkuSearc
 		Joins("JOIN products p ON p.id = s.product_id AND p.deleted_at IS NULL AND p.is_draft = 0").
 		Where("s.deleted_at IS NULL AND s.tenant_id = ? AND p.tenant_id = ?", normalizeTenantID(r.tenantID), normalizeTenantID(r.tenantID))
 
-	whereSQL := `(s.sku_code LIKE ? OR s.spec_data LIKE ? OR p.name LIKE ? OR p.product_sn LIKE ? OR p.material_code LIKE ? OR p.source LIKE ? OR p.sku_specs_json LIKE ?`
-	args := []interface{}{kw, kw, kw, kw, kw, kw, kw}
+	// 仅匹配当前 SKU 字段 + 商品基础信息；不匹配 p.sku_specs_json，
+	// 避免兄弟规格文案（如「不含…飞轮…」）把同商品其它 SKU 一并搜出。
+	whereSQL := `(s.sku_code LIKE ? OR s.spec_data LIKE ? OR p.name LIKE ? OR p.product_sn LIKE ? OR p.material_code LIKE ? OR p.source LIKE ?`
+	args := []interface{}{kw, kw, kw, kw, kw, kw}
 	if id, err := strconv.ParseUint(keyword, 10, 64); err == nil && id > 0 {
 		whereSQL += ` OR p.id = ? OR s.id = ?`
 		args = append(args, id, id)
