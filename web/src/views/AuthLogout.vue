@@ -1,10 +1,19 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import { clearToken, redirectToPortal } from '../utils/auth'
+import { clearToken, iamBase, redirectToPortal } from '../utils/auth'
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    await fetch(`${iamBase()}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+  } catch {
+    // ignore
+  }
   clearToken()
-  // UserCore 退出时通过 iframe 调用，仅清本地 token，不跳转父页面
   if (window.self !== window.top) return
   redirectToPortal()
 })
