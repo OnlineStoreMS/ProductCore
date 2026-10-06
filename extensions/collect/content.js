@@ -90,10 +90,7 @@
   }
 
   function zzbSpecValue(name) {
-    const s = String(name || "").trim();
-    const wrapped = s.match(/^商品规格[（(](.+)[）)]$/);
-    if (wrapped) return wrapped[1].trim();
-    return parseSkuName(s).specValue;
+    return parseSkuName(name).specValue;
   }
 
   function zzbStoredTitle() {
@@ -159,7 +156,7 @@
     const zzbItemId = String(
       (pack && pack.itemId) || (packItem && (packItem.itemId || packItem.numIid)) || ""
     );
-    if (pack && pack.myItemInfo) {
+    if (pack && pack.myItemInfo && !Array.isArray(list)) {
       const info = pack.myItemInfo;
       if (info.pcVideo) addVid(info.pcVideo);
       if (Array.isArray(info.item && info.item.videos)) {
@@ -965,13 +962,26 @@
     };
   }
 
-  /** 与 web/src/utils/skuCsvImport.ts 一致：规格值取冒号后，规格名固定「商品规格」 */
+  /** 规格名固定「商品规格」。至尊宝 SKU 工具是「任意标签(值)」或「标签:值」，括号/冒号里才是规格值。 */
   var DEFAULT_SPEC_NAME = "商品规格";
+
+  function unwrapLabeledSpec(text) {
+    const m = String(text || "").match(/^([^:：()（）]+)[（(](.+)[）)]$/);
+    if (!m) return text;
+    const prefix = m[1].trim();
+    const inner = m[2].trim();
+    if (!inner || !prefix) return text;
+    if (!/[\u4e00-\u9fff]/.test(prefix)) return text;
+    if (/[A-Za-z0-9]/.test(prefix)) return text;
+    if (prefix.length > 16) return text;
+    return inner;
+  }
 
   function parseSkuName(skuName) {
     const text = String(skuName || "")
       .replace(/\uFEFF/g, "")
       .replace(/\t/g, "")
+      .replace(/\s+/g, " ")
       .trim();
     const idxAscii = text.indexOf(":");
     const idxFull = text.indexOf("：");
@@ -979,7 +989,8 @@
     if (idxAscii >= 0 && idxFull >= 0) splitAt = Math.min(idxAscii, idxFull);
     else if (idxAscii >= 0) splitAt = idxAscii;
     else if (idxFull >= 0) splitAt = idxFull;
-    const specValue = splitAt <= 0 ? text : text.slice(splitAt + 1).trim();
+    let specValue = splitAt > 0 ? text.slice(splitAt + 1).trim() : text;
+    specValue = unwrapLabeledSpec(specValue);
     return { specName: DEFAULT_SPEC_NAME, specValue: specValue || text };
   }
 

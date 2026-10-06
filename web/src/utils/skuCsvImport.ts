@@ -67,16 +67,30 @@ function parseCsvLine(line: string): string[] {
   return result
 }
 
-/** 解析至尊宝「颜色分类:规格值」：规格值取冒号后，规格名一律默认「商品规格」 */
+/** 至尊宝 SKU 工具「任意中文标签(值)」：括号里才是规格值；型号本身带括号的不剥。 */
+function unwrapLabeledSpec(text: string): string {
+  const m = text.match(/^([^:：()（）]+)[（(](.+)[）)]$/)
+  if (!m) return text
+  const prefix = m[1].trim()
+  const inner = m[2].trim()
+  if (!inner || !prefix) return text
+  if (!/[\u4e00-\u9fff]/.test(prefix)) return text
+  if (/[A-Za-z0-9]/.test(prefix)) return text
+  if (prefix.length > 16) return text
+  return inner
+}
+
+/** 解析至尊宝「标签:值」或「标签(值)」：规格值取里面那段，规格名一律默认「商品规格」 */
 export function parseSkuName(skuName: string): { specName: string; specValue: string } {
-  const text = normalizeField(skuName)
+  const text = normalizeField(skuName).replace(/\s+/g, ' ').trim()
   const idxAscii = text.indexOf(':')
   const idxFull = text.indexOf('：')
   let splitAt = -1
   if (idxAscii >= 0 && idxFull >= 0) splitAt = Math.min(idxAscii, idxFull)
   else if (idxAscii >= 0) splitAt = idxAscii
   else if (idxFull >= 0) splitAt = idxFull
-  const specValue = splitAt <= 0 ? text : text.slice(splitAt + 1).trim()
+  let specValue = splitAt > 0 ? text.slice(splitAt + 1).trim() : text
+  specValue = unwrapLabeledSpec(specValue)
   return {
     specName: DEFAULT_SPEC_NAME,
     specValue: specValue || text,

@@ -87,15 +87,13 @@ function mergeHarvest(tabId, incoming) {
     if (incoming.clickedMedia) cur.clickedMedia = true;
     if (incoming.clickedSku) cur.clickedSku = true;
     if (incoming.clickedTitle) cur.clickedTitle = true;
-    const storeItem = incoming.zzbItemId ? String(incoming.zzbItemId) : "";
-    const sameItem = !storeItem || !cur.itemId || storeItem === String(cur.itemId);
-    // 主图/视频/SKU 只在点过对应按钮、且缓存属于当前商品后才收。
-    // 视频必须整表覆盖（包括空数组），否则没视频的商品会沿用上一件的 mp4。
-    if (sameItem && cur.clickedMedia && incoming.fromZzbStore) {
+    // 主图/视频跟「手机端主图视频SKU」走 fileList_tb，点完就收，不等 SKU 工具。
+    // 视频整表覆盖（包括空数组），避免没视频的商品沿用上一件 mp4。
+    if (cur.clickedMedia && incoming.fromZzbStore) {
       if (Array.isArray(incoming.images) && incoming.images.length) cur.images = incoming.images;
       if (Array.isArray(incoming.videos)) cur.videos = incoming.videos;
     }
-    if (sameItem && cur.clickedSku && incoming.fromZzbStore && Array.isArray(incoming.skus) && incoming.skus.length) {
+    if (cur.clickedSku && incoming.fromZzbStore && Array.isArray(incoming.skus) && incoming.skus.length) {
       cur.skus = incoming.skus;
     }
   tabState.set(tabId, cur);
@@ -186,6 +184,7 @@ function scrapeSkuMainWorld() {
     const text = String(skuName || "")
       .replace(/\uFEFF/g, "")
       .replace(/\t/g, "")
+      .replace(/\s+/g, " ")
       .trim();
     const idxAscii = text.indexOf(":");
     const idxFull = text.indexOf("：");
@@ -193,7 +192,15 @@ function scrapeSkuMainWorld() {
     if (idxAscii >= 0 && idxFull >= 0) splitAt = Math.min(idxAscii, idxFull);
     else if (idxAscii >= 0) splitAt = idxAscii;
     else if (idxFull >= 0) splitAt = idxFull;
-    const specValue = splitAt <= 0 ? text : text.slice(splitAt + 1).trim();
+    let specValue = splitAt > 0 ? text.slice(splitAt + 1).trim() : text;
+    const wrapped = specValue.match(/^([^:：()（）]+)[（(](.+)[）)]$/);
+    if (wrapped) {
+      const prefix = wrapped[1].trim();
+      const inner = wrapped[2].trim();
+      if (inner && prefix && /[\u4e00-\u9fff]/.test(prefix) && !/[A-Za-z0-9]/.test(prefix) && prefix.length <= 16) {
+        specValue = inner;
+      }
+    }
     return { specName: "商品规格", specValue: specValue || text };
   };
   const push = (name, price, stock) => {
