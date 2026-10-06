@@ -6,6 +6,21 @@ import (
 	"productcore/internal/dto"
 )
 
+func TestCollectMainURLsSkipsCoverDuplicate(t *testing.T) {
+	cover := "https://osms.example/products/120/main/a.jpg"
+	got := collectMainURLs(&dto.ProductDTO{
+		Pic: cover,
+		AlbumPics: []string{
+			cover,
+			"https://osms.example/products/120/album/b.jpg",
+			"https://osms.example/products/120/album/c.jpg",
+		},
+	})
+	if len(got) != 3 || got[0] != cover || got[1] == cover {
+		t.Fatalf("collectMainURLs = %#v", got)
+	}
+}
+
 func TestExportSpecNameUsesSkuSpecs(t *testing.T) {
 	specs := []dto.SkuSpecDTO{
 		{Name: "", Values: nil},

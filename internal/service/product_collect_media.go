@@ -65,6 +65,7 @@ func (s *ProductService) ingestRemoteImages(id uint64, in *dto.ProductDTO) (ok, 
 
 	in.Pic = resolve(in.Pic, "main")
 	in.AlbumPics = compactRemoteURLs(resolveList(in.AlbumPics, "album", resolve))
+	in.AlbumPics = dropCoverDuplicate(in.Pic, in.AlbumPics)
 	if in.Media != nil {
 		in.Media.DetailPics = compactRemoteURLs(resolveList(in.Media.DetailPics, "detail", resolve))
 		in.Media.Pics34 = compactRemoteURLs(resolveList(in.Media.Pics34, "pics34", resolve))
@@ -130,6 +131,21 @@ func resolveList(list []string, resource string, resolve func(string, string) st
 	out := make([]string, len(list))
 	for i, raw := range list {
 		out[i] = resolve(raw, resource)
+	}
+	return out
+}
+
+func dropCoverDuplicate(cover string, list []string) []string {
+	cover = strings.TrimSpace(cover)
+	if cover == "" {
+		return list
+	}
+	out := make([]string, 0, len(list))
+	for _, raw := range list {
+		if strings.TrimSpace(raw) == cover {
+			continue
+		}
+		out = append(out, raw)
 	}
 	return out
 }

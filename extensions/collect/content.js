@@ -989,7 +989,7 @@
       brandId: brandId,
       categoryId: categoryId,
       pic: mains[0] || "",
-      albumPics: mains,
+      albumPics: mains.slice(1),
       media: {
         detailPics: details,
       },

@@ -142,14 +142,25 @@ func ExportProduct(product *dto.ProductDTO, store storage.Storage) (zipPath stri
 }
 
 func collectMainURLs(product *dto.ProductDTO) []string {
+	seen := map[string]struct{}{}
 	var urls []string
-	if u := strings.TrimSpace(product.Pic); u != "" {
+	add := func(raw string) {
+		u := strings.TrimSpace(raw)
+		if u == "" {
+			return
+		}
+		if _, ok := seen[u]; ok {
+			return
+		}
+		seen[u] = struct{}{}
 		urls = append(urls, u)
 	}
+	if product == nil {
+		return nil
+	}
+	add(product.Pic)
 	for _, u := range product.AlbumPics {
-		if u = strings.TrimSpace(u); u != "" {
-			urls = append(urls, u)
-		}
+		add(u)
 	}
 	return urls
 }
