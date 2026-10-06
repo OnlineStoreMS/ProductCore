@@ -99,9 +99,10 @@ export function parseSkuName(skuName: string): { specName: string; specValue: st
 
 function parseNumber(value: string): number {
   const text = normalizeField(value)
-  if (!text) return 0
-  const n = Number.parseFloat(text)
-  return Number.isFinite(n) ? n : 0
+  if (!text || /^(?:-|—|–|\*|-1)$/.test(text)) return 0
+  const n = Number.parseFloat(text.replace(/,/g, ''))
+  if (!Number.isFinite(n) || n < 0) return 0
+  return n
 }
 
 /** 库存为「-」或无法解析时按 0 */

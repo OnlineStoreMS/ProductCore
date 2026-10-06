@@ -66,12 +66,14 @@
     const id = (href.match(/[?&]id=(\d+)/) || [])[1] || "";
     if (id) payload.itemId = id;
     const stored = harvestZzbStore();
-    if (stored.fromZzbStore) {
+    const tableSkus = extractSkus();
+    const skus = mergeSkuRows(stored.skus, tableSkus);
+    if (stored.fromZzbStore || skus.length) {
       payload.fromZzbStore = true;
       if (stored.zzbItemId) payload.zzbItemId = stored.zzbItemId;
       payload.images = stored.images;
       payload.videos = stored.videos;
-      payload.skus = stored.skus;
+      payload.skus = skus;
     }
     if (stored.storedTitle) payload.zzbTitle = stored.storedTitle;
     if (payload.fromZzbStore || payload.itemId || payload.url) {
@@ -163,10 +165,46 @@
         info.item.videos.forEach((v) => addVid(v && v.url));
       }
     }
-    if (!skus.length && pack && Array.isArray(pack.skuInfos)) {
-      pack.skuInfos.forEach(addSku);
+    if (pack && Array.isArray(pack.skuInfos)) {
+      pack.skuInfos.forEach((item) => {
+        const specValue = zzbSpecValue(item && item.name);
+        if (!specValue) return;
+        const prev = skus.find((s) => s.specValue === specValue);
+        const price = num(item.price);
+        const stock = parseStock(item.quantity);
+        const pic = clean(item.url);
+        if (!prev) {
+          addSku(item);
+          return;
+        }
+        if (price > 0) {
+          prev.price = price;
+          prev.originalPrice = price;
+        }
+        if (stock > 0) prev.stock = stock;
+        if (pic) prev.pic = pic;
+      });
     }
     return { images, videos, skus, storedTitle: zzbStoredTitle(), fromZzbStore: hasStore, zzbItemId };
+  }
+
+  function mergeSkuRows(base, extra) {
+    const out = Array.isArray(base) ? base.slice() : [];
+    (extra || []).forEach((row) => {
+      if (!row || !row.specValue) return;
+      const prev = out.find((s) => s.specValue === row.specValue);
+      if (!prev) {
+        out.push(row);
+        return;
+      }
+      if (row.price > 0) {
+        prev.price = row.price;
+        prev.originalPrice = row.originalPrice || row.price;
+      }
+      if (row.stock > 0) prev.stock = row.stock;
+      if (row.pic && !prev.pic) prev.pic = row.pic;
+    });
+    return out;
   }
 
   function looksLikeTitle(raw) {
@@ -489,10 +527,15 @@
 
   function parseSkuByText(push) {
     const raw = ((document.body && document.body.innerText) || "").replace(/\r/g, "");
-    const re =
+    const multiline =
       /([^\n]{2,80}[:：][^\n]{1,80})\n\s*商品ID[:：]\s*\d+\s*\n\s*(\d+(?:\.\d+)?)\s*\n\s*([^\n]*)\s*\n\s*([^\n]*)/g;
     let m;
-    while ((m = re.exec(raw))) {
+    while ((m = multiline.exec(raw))) {
+      push(m[1], "", m[2], m[2], m[4]);
+    }
+    const compact =
+      /((?:商品规格|颜色分类|颜色|尺码分类|尺码|规格|套餐类型|套餐|款式|型号)[:：][^\n]{1,80}?)\s+商品ID[:：]\s*\d+\s+(\d+(?:\.\d+)?)\s+(\S+)\s+(\S+)/g;
+    while ((m = compact.exec(raw))) {
       push(m[1], "", m[2], m[2], m[4]);
     }
   }
@@ -713,15 +756,20 @@
   }
 
   function num(v) {
-    const n = Number(String(v || "").replace(/,/g, "").replace(/[^\d.]/g, ""));
-    return isFinite(n) ? n : 0;
+    if (typeof v === "number") return isFinite(v) && v > 0 ? v : 0;
+    const raw = String(v == null ? "" : v).replace(/,/g, "").trim();
+    if (!raw || /^(?:-|—|–|\*|无|-1)$/.test(raw)) return 0;
+    const n = Number(raw.replace(/[^\d.-]/g, ""));
+    if (!isFinite(n) || n < 0) return 0;
+    return n;
   }
 
-  /** SKU 工具库存为「-」或无数字时按 0 */
+  /** SKU 工具库存为「-」「-1」或无数字时按 0 */
   function parseStock(v) {
+    if (typeof v === "number") return isFinite(v) && v > 0 ? Math.round(v) : 0;
     const text = String(v || "").replace(/\s+/g, "").trim();
-    if (!text || /^(?:-|—|–|\*|无|无库存|空)$/.test(text)) return 0;
-    const n = Number(text.replace(/,/g, "").replace(/[^\d.]/g, ""));
+    if (!text || /^(?:-|—|–|\*|无|无库存|空|-1)$/.test(text)) return 0;
+    const n = Number(text.replace(/,/g, "").replace(/[^\d.-]/g, ""));
     if (!isFinite(n) || n < 0) return 0;
     return Math.round(n);
   }

@@ -215,11 +215,12 @@ function scrapeSkuMainWorld() {
     const key = specName + "\0" + specValue;
     if (seen[key]) return;
     seen[key] = 1;
-    const n = Number(String(price || "").replace(/[^\d.]/g, ""));
+    const n = Number(String(price == null ? "" : price).replace(/,/g, "").replace(/[^\d.-]/g, ""));
+    const priceNum = isFinite(n) && n > 0 ? n : 0;
     const stockText = String(stock || "").replace(/\s+/g, "").trim();
     let stockNum = 0;
-    if (stockText && !/^(?:-|—|–|\*|无|无库存|空)$/.test(stockText)) {
-      stockNum = Math.round(Number(stockText.replace(/[^\d.]/g, "")));
+    if (stockText && !/^(?:-|—|–|\*|无|无库存|空|-1)$/.test(stockText)) {
+      stockNum = Math.round(Number(stockText.replace(/,/g, "").replace(/[^\d.-]/g, "")));
       if (!isFinite(stockNum) || stockNum < 0) stockNum = 0;
     }
     rows.push({
@@ -227,8 +228,8 @@ function scrapeSkuMainWorld() {
       specName,
       specValue,
       pic: "",
-      price: isFinite(n) ? n : 0,
-      originalPrice: isFinite(n) ? n : 0,
+      price: priceNum,
+      originalPrice: priceNum,
       stock: stockNum,
     });
   };
