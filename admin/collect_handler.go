@@ -40,7 +40,7 @@ func (h *ProductCollectHandler) Ingest(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "请提交采集到的商品数据")
 		return
 	}
-	task, err := h.svc.IngestFromExtension(authcontext.TenantID(c), authcontext.UserID(c), in.ProductURL, in.Product)
+	task, err := h.svc.IngestFromExtension(authcontext.TenantID(c), authcontext.UserID(c), in.ProductURL, in.Product, in.Videos)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return

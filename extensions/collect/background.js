@@ -38,13 +38,20 @@ function emptyState() {
     skus: [],
     clickedMedia: false,
     clickedSku: false,
+    clickedTitle: false,
   };
 }
 
 function mergeHarvest(tabId, incoming) {
   const cur = tabState.get(tabId) || emptyState();
-  if (incoming.title && (!cur.title || incoming.title.length >= cur.title.length)) {
-    cur.title = incoming.title;
+  if (incoming.title) {
+    const next = String(incoming.title)
+      .replace(/\s*已售(?:\s*\d+\+?\s*件?|完)?\s*/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (next && (!cur.title || incoming.fromZzb || next.length >= cur.title.length)) {
+      cur.title = next;
+    }
   }
     if (incoming.itemId) cur.itemId = incoming.itemId;
     if (incoming.url && /item\.taobao|detail\.tmall/i.test(incoming.url)) cur.url = incoming.url;
@@ -53,11 +60,12 @@ function mergeHarvest(tabId, incoming) {
     }
   if (incoming.clickedMedia) cur.clickedMedia = true;
   if (incoming.clickedSku) cur.clickedSku = true;
+  if (incoming.clickedTitle) cur.clickedTitle = true;
   if (Array.isArray(incoming.images) && incoming.images.length) {
     cur.images = mergeImages(cur.images, incoming.images);
   }
   if (Array.isArray(incoming.videos) && incoming.videos.length) {
-    cur.videos = uniqueStrings(cur.videos.concat(incoming.videos));
+    cur.videos = mergeVideos(cur.videos, incoming.videos);
   }
   if (Array.isArray(incoming.skus) && incoming.skus.length) {
     if (!cur.skus.length || incoming.skus.length >= cur.skus.length) {
@@ -79,6 +87,21 @@ function mergeImages(oldList, nextList) {
       bySrc.set(img.src, img);
     }
   });
+  return Array.from(bySrc.values());
+}
+
+function mergeVideos(oldList, nextList) {
+  const bySrc = new Map();
+  const add = (item) => {
+    const src = typeof item === "string" ? String(item).trim() : item && item.src ? String(item.src).trim() : "";
+    if (!src) return;
+    const ratio = item && typeof item === "object" ? String(item.ratio || "") : "";
+    const prev = bySrc.get(src) || { src, ratio: "" };
+    if (ratio && !prev.ratio) prev.ratio = ratio;
+    bySrc.set(src, prev);
+  };
+  (oldList || []).forEach(add);
+  (nextList || []).forEach(add);
   return Array.from(bySrc.values());
 }
 

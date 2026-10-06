@@ -40,10 +40,10 @@ func TestDetectCollectPlatform(t *testing.T) {
 
 func TestIngestFromExtensionEmpty(t *testing.T) {
 	s := &ProductCollectService{}
-	if _, err := s.IngestFromExtension(1, 1, "", nil); err != ErrCollectEmpty {
+	if _, err := s.IngestFromExtension(1, 1, "", nil, nil); err != ErrCollectEmpty {
 		t.Fatalf("nil product: %v", err)
 	}
-	if _, err := s.IngestFromExtension(1, 1, "https://item.taobao.com/item.htm?id=1", &dto.ProductDTO{Name: "x"}); err != ErrCollectEmpty {
+	if _, err := s.IngestFromExtension(1, 1, "https://item.taobao.com/item.htm?id=1", &dto.ProductDTO{Name: "x"}, nil); err != ErrCollectEmpty {
 		t.Fatalf("no pics: %v", err)
 	}
 }

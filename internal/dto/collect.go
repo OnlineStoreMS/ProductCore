@@ -5,6 +5,7 @@ type IngestProductCollectRequest struct {
 	ProductURL string      `json:"productUrl"`
 	Platform   string      `json:"platform"`
 	Product    *ProductDTO `json:"product" binding:"required"`
+	Videos     []string    `json:"videos,omitempty"`
 }
 
 type ProductCollectTaskDTO struct {

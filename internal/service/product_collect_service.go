@@ -21,7 +21,7 @@ func NewProductCollectService(repos *repo.Repos, agents *agentscenter.Client, pr
 	return &ProductCollectService{repos: repos, agents: agents, products: products}
 }
 
-func (s *ProductCollectService) IngestFromExtension(tenantID, userID uint64, productURL string, product *dto.ProductDTO) (*dto.ProductCollectTaskDTO, error) {
+func (s *ProductCollectService) IngestFromExtension(tenantID, userID uint64, productURL string, product *dto.ProductDTO, videoURLs []string) (*dto.ProductCollectTaskDTO, error) {
 	tenantID = repo.NormalizeTenantID(tenantID)
 	if product == nil {
 		return nil, ErrCollectEmpty
@@ -60,14 +60,18 @@ func (s *ProductCollectService) IngestFromExtension(tenantID, userID uint64, pro
 	if product.Media != nil {
 		detailN = len(product.Media.DetailPics)
 	}
+	videos := collectRemoteVideoURLs(product, videoURLs)
+	stripRemoteVideos(product)
 	msg := "扩展采集「" + name + "」主图" + jsonNumber(uint64(len(product.AlbumPics))) +
-		" 详情" + jsonNumber(uint64(detailN)) + " SKU" + jsonNumber(uint64(len(product.Skus)))
+		" 详情" + jsonNumber(uint64(detailN)) + " SKU" + jsonNumber(uint64(len(product.Skus))) +
+		" 视频" + jsonNumber(uint64(len(videos)))
 	payload := map[string]any{
 		"platform":   platform,
 		"productUrl": normalized,
 		"source":     "extension",
 		"message":    msg,
 		"product":    product,
+		"videos":     videos,
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -178,14 +182,38 @@ func (s *ProductCollectService) ingestIfNeeded(tenantID uint64, task *model.Prod
 			return
 		}
 	}
+	var extra []string
+	if rawVideos, ok := payload["videos"]; ok && len(rawVideos) > 0 {
+		_ = json.Unmarshal(rawVideos, &extra)
+	}
+	urls := collectRemoteVideoURLs(&in, extra)
+	stripRemoteVideos(&in)
 	created, err := products.Create(&in)
 	if err != nil {
 		s.patchCollectJSON(task, payload, 0, err.Error())
 		return
 	}
-	if created != nil {
-		s.patchCollectJSON(task, payload, created.ID, "")
+	if created == nil {
+		return
 	}
+	if n, skipped, vErr := products.ingestRemoteVideos(created.ID, urls); vErr != nil {
+		s.patchCollectJSON(task, payload, created.ID, "视频上传失败："+vErr.Error())
+		return
+	} else if n > 0 || skipped > 0 {
+		var msg string
+		if rawMsg, ok := payload["message"]; ok {
+			_ = json.Unmarshal(rawMsg, &msg)
+		}
+		if n > 0 {
+			msg += "，已上传视频" + jsonNumber(uint64(n))
+		}
+		if skipped > 0 {
+			msg += "（跳过" + jsonNumber(uint64(skipped)) + "个比例不符或无法下载）"
+		}
+		b, _ := json.Marshal(msg)
+		payload["message"] = b
+	}
+	s.patchCollectJSON(task, payload, created.ID, "")
 }
 
 func (s *ProductCollectService) patchCollectJSON(task *model.ProductCollectTask, payload map[string]json.RawMessage, productID uint64, ingestErr string) {

@@ -70,7 +70,7 @@ onMounted(() => {
         <span>商品采集</span>
       </template>
       <p class="hint">
-        用 Chrome 扩展在商品页人工点至尊宝「手机端主图视频SKU」「SKU工具」，踩标题后上传。不再通过 WindowsAgent 下发链接。
+        用 Chrome 扩展在商品页人工点至尊宝「悬浮标题采集」「手机端主图视频SKU」「SKU工具」，再上传。不再通过 WindowsAgent 下发链接。
         扩展安装见仓库 <code>extensions/collect</code>。
       </p>
     </el-card>

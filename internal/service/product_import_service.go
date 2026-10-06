@@ -120,7 +120,7 @@ func (s *ProductImportService) ImportFromZip(form ProductImportInput, zipFile *m
 		if err != nil {
 			return nil, fmt.Errorf("上传视频失败: %w", err)
 		}
-		if err := assignImportVideo(videosDTO, v.Ratio, url); err != nil {
+		if err := assignVideoByRatio(videosDTO, v.Ratio, url); err != nil {
 			return nil, fmt.Errorf("%w: %s", ErrInvalidImport, err.Error())
 		}
 	}
@@ -213,46 +213,11 @@ func (s *ProductImportService) validateVideos(pkg *productimport.ParsedPackage) 
 }
 
 func importVideoResource(ratio string) (string, error) {
-	switch ratio {
-	case "1:1":
-		return "import_video_11", nil
-	case "3:4":
-		return "import_video_34", nil
-	case "16:9":
-		return "import_video_169", nil
-	case "9:16":
-		return "import_video_916", nil
-	default:
-		return "", fmt.Errorf("不支持的视频比例 %s", ratio)
+	res, err := videoUploadResource(ratio)
+	if err != nil {
+		return "", err
 	}
-}
-
-func assignImportVideo(dst *dto.ProductVideosDTO, ratio, url string) error {
-	switch ratio {
-	case "1:1":
-		if dst.Ratio11 != "" {
-			return fmt.Errorf("视频文件夹中只能有一个 1:1 视频")
-		}
-		dst.Ratio11 = url
-	case "3:4":
-		if dst.Ratio34 != "" {
-			return fmt.Errorf("视频文件夹中只能有一个 3:4 视频")
-		}
-		dst.Ratio34 = url
-	case "16:9":
-		if dst.Ratio169 != "" {
-			return fmt.Errorf("视频文件夹中只能有一个 16:9 视频")
-		}
-		dst.Ratio169 = url
-	case "9:16":
-		if dst.Ratio916 != "" {
-			return fmt.Errorf("视频文件夹中只能有一个 9:16 视频")
-		}
-		dst.Ratio916 = url
-	default:
-		return fmt.Errorf("不支持的视频比例 %s", ratio)
-	}
-	return nil
+	return res, nil
 }
 
 func (s *ProductImportService) uploadOpts(productID uint64, resource string, skuID uint64) storage.UploadOptions {
