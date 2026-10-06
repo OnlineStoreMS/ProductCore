@@ -94,9 +94,34 @@ function mergeHarvest(tabId, incoming) {
       if (Array.isArray(incoming.videos)) cur.videos = incoming.videos;
     }
     if (cur.clickedSku && incoming.fromZzbStore && Array.isArray(incoming.skus) && incoming.skus.length) {
-      cur.skus = incoming.skus;
+      cur.skus = mergeSkuState(cur.skus, incoming.skus);
     }
   tabState.set(tabId, cur);
+}
+
+function mergeSkuState(oldList, nextList) {
+  const byKey = new Map();
+  const add = (row) => {
+    if (!row) return;
+    const key = String(row.specValue || row.name || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!key) return;
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, Object.assign({}, row, { specValue: key, name: row.name || key }));
+      return;
+    }
+    if (row.price > 0) {
+      prev.price = row.price;
+      prev.originalPrice = row.originalPrice || row.price;
+    }
+    if (row.stock > 0) prev.stock = row.stock;
+    if (row.pic && !prev.pic) prev.pic = row.pic;
+  };
+  (oldList || []).forEach(add);
+  (nextList || []).forEach(add);
+  return Array.from(byKey.values());
 }
 
 function mergeImages(oldList, nextList) {
