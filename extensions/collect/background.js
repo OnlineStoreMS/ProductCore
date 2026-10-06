@@ -37,7 +37,9 @@ function emptyState() {
 
 function mergeHarvest(tabId, incoming) {
   const cur = tabState.get(tabId) || emptyState();
-  if (incoming.title) cur.title = incoming.title;
+  if (incoming.title && (!cur.title || incoming.title.length >= cur.title.length)) {
+    cur.title = incoming.title;
+  }
     if (incoming.itemId) cur.itemId = incoming.itemId;
     if (incoming.url && /item\.taobao|detail\.tmall/i.test(incoming.url)) cur.url = incoming.url;
     if (incoming.platform && incoming.url && /item\.taobao|detail\.tmall/i.test(incoming.url)) {

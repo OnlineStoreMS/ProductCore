@@ -3,6 +3,8 @@
   const isTop = window === window.top;
   const href = location.href || "";
 
+  let hoveredTitle = "";
+
   document.addEventListener(
     "click",
     (ev) => {
@@ -13,6 +15,17 @@
       if (t.indexOf("SKU工具") >= 0) {
         report({ clickedSku: true });
       }
+    },
+    true
+  );
+
+  document.addEventListener(
+    "mouseover",
+    (ev) => {
+      const t = pickHoveredTitle(ev.target);
+      if (!t || t === hoveredTitle) return;
+      hoveredTitle = t;
+      report({ title: t });
     },
     true
   );
@@ -30,8 +43,8 @@
     };
     if (/item\.taobao\.com|detail\.tmall\.com/i.test(href)) {
       payload.url = href;
-      Object.assign(payload, extractTitle());
     }
+    Object.assign(payload, extractTitle());
     const media = extractMedia();
     if (media.images.length || media.videos.length) {
       payload.images = media.images;
@@ -44,16 +57,59 @@
     }
   }
 
+  function looksLikeTitle(raw) {
+    const t = String(raw || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (t.length < 8 || t.length > 200) return "";
+    if (
+      /验证码|评价|销量|收藏|购物车|登录|资源一键下载|手机端主图|SKU工具|数据工具|全选 \(|详情页/.test(
+        t
+      )
+    ) {
+      return "";
+    }
+    return t;
+  }
+
+  function pickHoveredTitle(el) {
+    if (!el || (el.closest && el.closest("#pc-collect-panel"))) return "";
+    const node =
+      (el.closest &&
+        el.closest(
+          "h1, #J_Title, [class*='ItemTitle'], [class*='mainTitle'], [class*='itemTitle']"
+        )) ||
+      null;
+    return looksLikeTitle(node ? node.innerText || node.textContent : "");
+  }
+
   function extractTitle() {
     const out = {};
     const id = (href.match(/[?&]id=(\d+)/) || [])[1] || "";
     if (id) out.itemId = id;
-    const el =
-      document.querySelector("#J_Title h3, #J_Title, [class*='ItemTitle'], [class*='mainTitle']") ||
-      document.querySelector("h1");
-    let title = el ? (el.innerText || "").trim() : "";
-    if (!title) title = (document.title || "").replace(/-淘宝网|-天猫.*$/, "").trim();
-    if (title && title.indexOf("验证码") < 0) out.title = title.slice(0, 200);
+    const cands = [];
+    if (hoveredTitle) cands.push(hoveredTitle);
+    document
+      .querySelectorAll(
+        "h1, #J_Title h3, #J_Title, [class*='ItemTitle'], [class*='mainTitle'], [class*='itemTitle']"
+      )
+      .forEach((el) => {
+        const t = looksLikeTitle(el.innerText || el.textContent);
+        if (t) cands.push(t);
+      });
+    document.querySelectorAll("input, textarea").forEach((el) => {
+      const t = looksLikeTitle(el.value);
+      if (t) cands.push(t);
+    });
+    const page = looksLikeTitle(
+      (document.title || "")
+        .replace(/-tmall\.com.*$/i, "")
+        .replace(/-淘宝网.*$/, "")
+        .replace(/-天猫.*$/, "")
+    );
+    if (page) cands.push(page);
+    cands.sort((a, b) => b.length - a.length);
+    if (cands[0]) out.title = cands[0].slice(0, 200);
     return out;
   }
 
@@ -212,7 +268,7 @@
     box.innerHTML =
       '<header>商品采集 <button type="button" data-act="hide">×</button></header>' +
       '<div class="body">' +
-      '<div class="hint" id="pc-hint">请先点至尊宝「手机端主图视频SKU」，弹层出来后会自动抓图；再点「SKU工具」抓规格表。</div>' +
+      '<div class="hint" id="pc-hint">请把鼠标放到商品标题上踩一下，再点至尊宝「手机端主图视频SKU」。</div>' +
       '<div class="meta" id="pc-title"></div>' +
       '<div class="counts">' +
       '<div><b id="pc-main">0</b>主图</div>' +
@@ -252,7 +308,8 @@
     panel.querySelector("#pc-main").textContent = String(c.main);
     panel.querySelector("#pc-detail").textContent = String(c.detail);
     panel.querySelector("#pc-sku").textContent = String(c.sku);
-    let hint = "请点至尊宝「手机端主图视频SKU」。";
+    let hint = "请把鼠标放到商品标题上踩一下，再点至尊宝「手机端主图视频SKU」。";
+    if (state.title) hint = "标题已抓到。请点至尊宝「手机端主图视频SKU」。";
     if (c.main > 0) hint = "主图已抓到。请再点「SKU工具」抓规格表。";
     if (c.main > 0 && c.sku > 0) hint = "可以上传了。品牌/分类入库后为 0，在商品系统里补。";
     if (state.clickedMedia && c.main === 0) hint = "已点主图工具，正在等弹层加载…";
