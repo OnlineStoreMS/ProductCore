@@ -25,6 +25,8 @@ const MATERIAL_CODE_MISMATCH = '资料编码不匹配，无法导入'
 
 export const SKU_CSV_HEADERS = ['sku名称', '图片', '原价', '计算价格', '库存', 'ID'] as const
 
+const DEFAULT_SPEC_NAME = '商品规格'
+
 const SKU_FILE_EXTENSIONS = ['.csv', '.xlsx', '.xls'] as const
 
 function normalizeField(value: string): string {
@@ -65,7 +67,7 @@ function parseCsvLine(line: string): string[] {
   return result
 }
 
-/** 解析「规格名:规格值」或「规格名：规格值」 */
+/** 解析至尊宝「颜色分类:规格值」：规格值取冒号后，规格名一律默认「商品规格」 */
 export function parseSkuName(skuName: string): { specName: string; specValue: string } {
   const text = normalizeField(skuName)
   const idxAscii = text.indexOf(':')
@@ -74,12 +76,10 @@ export function parseSkuName(skuName: string): { specName: string; specValue: st
   if (idxAscii >= 0 && idxFull >= 0) splitAt = Math.min(idxAscii, idxFull)
   else if (idxAscii >= 0) splitAt = idxAscii
   else if (idxFull >= 0) splitAt = idxFull
-  if (splitAt <= 0) {
-    return { specName: '', specValue: text }
-  }
+  const specValue = splitAt <= 0 ? text : text.slice(splitAt + 1).trim()
   return {
-    specName: text.slice(0, splitAt).trim(),
-    specValue: text.slice(splitAt + 1).trim(),
+    specName: DEFAULT_SPEC_NAME,
+    specValue: specValue || text,
   }
 }
 
@@ -88,6 +88,15 @@ function parseNumber(value: string): number {
   if (!text) return 0
   const n = Number.parseFloat(text)
   return Number.isFinite(n) ? n : 0
+}
+
+/** 库存为「-」或无法解析时按 0 */
+function parseStock(value: string): number {
+  const text = normalizeField(value)
+  if (!text || /^(?:-|—|–|\*|无|无库存|空)$/.test(text)) return 0
+  const n = Number.parseFloat(text.replace(/,/g, ''))
+  if (!Number.isFinite(n) || n < 0) return 0
+  return Math.round(n)
 }
 
 function findColumnIndex(headers: string[], names: string[]): number {
@@ -129,7 +138,7 @@ export function parseSkuRows(tableRows: string[][]): SkuCsvRow[] {
       specValue,
       picUrl: picIdx >= 0 ? normalizeField(cells[picIdx] ?? '') : '',
       price: parseNumber(cells[priceIdx] ?? ''),
-      stock: parseNumber(cells[stockIdx] ?? ''),
+      stock: parseStock(cells[stockIdx] ?? ''),
       materialCode: normalizeField(cells[idIdx] ?? ''),
     })
   }
@@ -193,8 +202,6 @@ export async function parseSkuFile(file: File): Promise<SkuCsvRow[]> {
   const buffer = await readFileAsArrayBuffer(file)
   return parseSkuExcel(buffer)
 }
-
-const DEFAULT_SPEC_NAME = '商品规格'
 
 function normalizeSpecName(name: string): string {
   const n = normalizeField(name)

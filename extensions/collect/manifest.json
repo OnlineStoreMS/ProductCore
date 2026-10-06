@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "ProductCore 商品采集",
-  "version": "0.1.4",
+  "version": "0.1.10",
   "description": "人工点至尊宝「手机端主图视频SKU」「SKU工具」后，自动抓取汇总，再上传到商品管理系统。",
-  "permissions": ["storage", "cookies", "tabs"],
+  "permissions": ["storage", "cookies", "tabs", "scripting"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
@@ -19,11 +19,20 @@
         "https://detail.tmall.com/*",
         "https://*.tmall.com/*",
         "https://*.taobao.com/*",
-        "https://*.zzbtool.com/*"
+        "https://zzbtool.com/*",
+        "https://zzbtool.com/",
+        "https://*.zzbtool.com/*",
+        "https://*.zzbtool.com/",
+        "http://*.zzbtool.com/*",
+        "http://*.zzbtool.com/",
+        "https://*.zzbtool.cn/*",
+        "https://*.zzbtool.cn/"
       ],
       "js": ["content.js"],
       "css": ["panel.css"],
       "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true,
       "run_at": "document_idle"
     }
   ]

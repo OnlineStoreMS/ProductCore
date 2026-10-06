@@ -60,7 +60,9 @@ function mergeHarvest(tabId, incoming) {
     cur.videos = uniqueStrings(cur.videos.concat(incoming.videos));
   }
   if (Array.isArray(incoming.skus) && incoming.skus.length) {
-    cur.skus = incoming.skus;
+    if (!cur.skus.length || incoming.skus.length >= cur.skus.length) {
+      cur.skus = incoming.skus;
+    }
   }
   tabState.set(tabId, cur);
 }
@@ -96,6 +98,89 @@ function pushToTab(tabId) {
   chrome.tabs.sendMessage(tabId, { type: "pc-collect-state", state: tabState.get(tabId) }, () => {
     void chrome.runtime.lastError;
   });
+}
+
+setInterval(pollSkuFrames, 1500);
+
+function pollSkuFrames() {
+  tabState.forEach((state, tabId) => {
+    if (!state.clickedSku) return;
+    chrome.scripting.executeScript(
+      {
+        target: { tabId, allFrames: true },
+        world: "MAIN",
+        func: scrapeSkuMainWorld,
+      },
+      (results) => {
+        if (chrome.runtime.lastError || !results) return;
+        const rows = [];
+        results.forEach((item) => {
+          if (Array.isArray(item.result)) rows.push.apply(rows, item.result);
+        });
+        if (!rows.length) return;
+        mergeHarvest(tabId, { skus: rows });
+        pushToTab(tabId);
+      }
+    );
+  });
+}
+
+function scrapeSkuMainWorld() {
+  const text = ((document.body && document.body.innerText) || "").replace(/\r/g, "");
+  if (/资源一键下载|全选 \(/.test(text) && !/请输入SKU名称|计算价格|颜色分类[:：]/.test(text)) return [];
+  if (!/原价/.test(text) || !/库存/.test(text)) {
+    if (!/请输入SKU名称|颜色分类[:：]/.test(text)) return [];
+  }
+  const rows = [];
+  const seen = {};
+  const parseSkuName = (skuName) => {
+    const text = String(skuName || "")
+      .replace(/\uFEFF/g, "")
+      .replace(/\t/g, "")
+      .trim();
+    const idxAscii = text.indexOf(":");
+    const idxFull = text.indexOf("：");
+    let splitAt = -1;
+    if (idxAscii >= 0 && idxFull >= 0) splitAt = Math.min(idxAscii, idxFull);
+    else if (idxAscii >= 0) splitAt = idxAscii;
+    else if (idxFull >= 0) splitAt = idxFull;
+    const specValue = splitAt <= 0 ? text : text.slice(splitAt + 1).trim();
+    return { specName: "商品规格", specValue: specValue || text };
+  };
+  const push = (name, price, stock) => {
+    const raw = String(name || "")
+      .replace(/\s*商品ID[:：]\s*\d+\s*/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const parsed = parseSkuName(raw);
+    const specName = "商品规格";
+    const specValue = parsed.specValue;
+    if (!specValue || /^\d+$/.test(specValue) || /请输入SKU|计算价格设置/.test(specValue)) return;
+    const key = specName + "\0" + specValue;
+    if (seen[key]) return;
+    seen[key] = 1;
+    const n = Number(String(price || "").replace(/[^\d.]/g, ""));
+    const stockText = String(stock || "").replace(/\s+/g, "").trim();
+    let stockNum = 0;
+    if (stockText && !/^(?:-|—|–|\*|无|无库存|空)$/.test(stockText)) {
+      stockNum = Math.round(Number(stockText.replace(/[^\d.]/g, "")));
+      if (!isFinite(stockNum) || stockNum < 0) stockNum = 0;
+    }
+    rows.push({
+      name: specValue,
+      specName,
+      specValue,
+      pic: "",
+      price: isFinite(n) ? n : 0,
+      originalPrice: isFinite(n) ? n : 0,
+      stock: stockNum,
+    });
+  };
+  const re =
+    /([^\n]{2,80}[:：][^\n]{1,80})\n\s*商品ID[:：]\s*\d+\s*\n\s*(\d+(?:\.\d+)?)\s*\n\s*([^\n]*)\s*\n\s*([^\n]*)/g;
+  let m;
+  while ((m = re.exec(text))) push(m[1], m[2], m[4]);
+  return rows;
 }
 
 async function loadMeta() {

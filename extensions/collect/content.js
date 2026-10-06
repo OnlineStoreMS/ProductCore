@@ -176,64 +176,166 @@
   }
 
   function extractSkus() {
-    const text = bodyText();
-    const looks = /规格名称|销售价|市场价|商家编码|规格信息/.test(text) && !/资源一键下载|全选 \(/.test(text);
-    if (!looks && !/sku/i.test(href)) return [];
+    if (!isSkuToolPage()) return [];
     const rows = [];
     const seen = {};
     const push = (name, pic, price, original, stock) => {
-      name = String(name || "").replace(/\s+/g, " ").trim();
-      if (!name) return;
-      if (/规格名称|销售价|市场价|库存|商家编码|查询中|加载中|sku名称/.test(name)) return;
-      const key = name + "\0" + String(pic || "");
+      const raw = String(name || "")
+        .replace(/\uFEFF/g, "")
+        .replace(/\t/g, "")
+        .replace(/\s*商品ID[:：]\s*\d+\s*/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      const parsed = parseSkuName(raw);
+      const specName = DEFAULT_SPEC_NAME;
+      const specValue = parsed.specValue;
+      if (!specValue || /^\d+$/.test(specValue)) return;
+      if (/^(规格名称|销售价|市场价|原价|库存|商家编码|名称|计算价格)$/.test(specValue)) return;
+      if (/查询中|加载中|请输入SKU/.test(specValue) || /查询中|加载中|请输入SKU/.test(specName)) return;
+      const key = specName + "\0" + specValue + "\0" + String(pic || "");
       const row = {
-        name,
+        name: specValue,
+        specName,
+        specValue,
         pic: clean(pic),
         price: num(price),
         originalPrice: num(original),
-        stock: Math.round(num(stock)),
+        stock: parseStock(stock),
       };
       if (seen[key] && !(row.price > 0 && !(seen[key].price > 0))) return;
       seen[key] = row;
       rows.push(row);
     };
-    document.querySelectorAll("table").forEach((table) => {
-      const headers = tableHeaders(table);
-      const nameCol = colIndex(headers, ["规格名称", "sku名称", "SKU名称", "规格信息"]);
-      const priceCol = colIndex(headers, ["销售价", "原价", "价格"]);
-      const marketCol = colIndex(headers, ["市场价"]);
-      const stockCol = colIndex(headers, ["库存"]);
-      if (nameCol < 0 && priceCol < 0) return;
-      tableBodyRows(table).forEach((tr) => {
-        const cells = Array.from(tr.querySelectorAll("td"));
-        if (!cells.length) return;
-        const img = tr.querySelector("img");
-        const name = cellValue(cells[nameCol >= 0 ? nameCol : 0]);
-        const price = moneyIn(priceCol >= 0 ? cells[priceCol] : null);
-        const market = moneyIn(marketCol >= 0 ? cells[marketCol] : null);
-        const stock = stockCol >= 0 ? cellValue(cells[stockCol]) : "";
-        push(name, img ? pickSrc(img) : "", price, market, stock);
+    collectRoots().forEach((root) => {
+      root.querySelectorAll(".layui-table-view, .layui-table-box, .el-table, .ant-table").forEach((wrap) =>
+        scanSkuTable(wrap, push)
+      );
+      root.querySelectorAll("table").forEach((table) => {
+        if (table.closest && table.closest(".el-table, .layui-table-view, .layui-table-box, .ant-table")) return;
+        scanSkuTable(table, push);
       });
     });
+    parseSkuByText(push);
     return dedupeSkuRows(rows);
   }
 
-  function tableHeaders(table) {
-    const wrap = table.closest(".el-table");
-    let row = wrap && wrap.querySelector(".el-table__header thead tr");
-    if (!row) row = table.querySelector("thead tr");
-    if (!row) {
-      const first = table.querySelector("tr");
-      if (first && /规格名称|销售价|市场价|sku名称|规格信息/.test(first.innerText || "")) row = first;
-    }
-    if (!row) return [];
-    return Array.from(row.querySelectorAll("th, td")).map(cellValue);
+  function isSkuToolPage() {
+    const text = overlayText();
+    if (/资源一键下载|全选 \(/.test(text) && !/请输入SKU名称|计算价格/.test(text)) return false;
+    return (
+      /请输入SKU名称|计算价格设置|颜色分类[:：]/.test(text) ||
+      (/原价/.test(text) && /库存/.test(text) && /名称/.test(text))
+    );
   }
 
-  function tableBodyRows(table) {
-    const body = table.querySelectorAll("tbody tr");
-    const rows = body.length ? Array.from(body) : Array.from(table.querySelectorAll("tr"));
-    return rows.filter((tr) => tr.querySelector("td") && !tr.querySelector("th"));
+  function parseSkuByText(push) {
+    const raw = ((document.body && document.body.innerText) || "").replace(/\r/g, "");
+    const re =
+      /([^\n]{2,80}[:：][^\n]{1,80})\n\s*商品ID[:：]\s*\d+\s*\n\s*(\d+(?:\.\d+)?)\s*\n\s*([^\n]*)\s*\n\s*([^\n]*)/g;
+    let m;
+    while ((m = re.exec(raw))) {
+      push(m[1], "", m[2], m[2], m[4]);
+    }
+  }
+
+  function overlayText() {
+    try {
+      return ((document.body && document.body.innerText) || "").replace(/\s+/g, " ").slice(0, 12000);
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function collectRoots() {
+    const out = [];
+    const visit = (root) => {
+      if (!root) return;
+      out.push(root);
+      const nodes = root.querySelectorAll ? root.querySelectorAll("*") : [];
+      for (let i = 0; i < nodes.length; i++) {
+        if (nodes[i].shadowRoot) visit(nodes[i].shadowRoot);
+      }
+    };
+    visit(document);
+    return out;
+  }
+
+  function scanSkuTable(root, push) {
+    const headers = skuHeaders(root);
+    const nameCol = colIndex(headers, ["规格名称", "SKU名称", "sku名称", "规格信息", "规格", "名称"]);
+    const originCol = colIndex(headers, ["原价"]);
+    const saleCol = colIndex(headers, ["销售价"]);
+    const marketCol = colIndex(headers, ["市场价"]);
+    const stockCol = colIndex(headers, ["库存"]);
+    if (nameCol < 0 && originCol < 0 && saleCol < 0) return;
+    skuBodyRows(root).forEach((tr) => {
+      const cells = skuCells(tr);
+      if (cells.length < 2) return;
+      const img = tr.querySelector("img");
+      let name = nameCol >= 0 ? cellValue(cells[nameCol]) : "";
+      if (!looksLikeSpecName(name)) {
+        name = "";
+        for (let i = 0; i < cells.length; i++) {
+          const t = cellValue(cells[i]);
+          if (looksLikeSpecName(t)) {
+            name = t;
+            break;
+          }
+        }
+      }
+      const origin = originCol >= 0 ? moneyIn(cells[originCol]) : 0;
+      const sale = saleCol >= 0 ? moneyIn(cells[saleCol]) : 0;
+      const market = marketCol >= 0 ? moneyIn(cells[marketCol]) : 0;
+      const stock = stockCol >= 0 ? cellValue(cells[stockCol]) : "";
+      push(name, img ? pickSrc(img) : "", origin || sale, market || sale || origin, stock);
+    });
+  }
+
+  function skuHeaders(root) {
+    const wrap =
+      (root.closest && root.closest(".layui-table-view, .layui-table-box, .el-table")) ||
+      root;
+    const ths = wrap.querySelectorAll(
+      ".layui-table-header th, .el-table__header th, thead th"
+    );
+    if (ths.length) return Array.from(ths).map(cellValue);
+    const cells = wrap.querySelectorAll(".el-table__header .el-table__cell, thead td");
+    if (cells.length) return Array.from(cells).map(cellValue);
+    const first = wrap.querySelector("tr");
+    if (first && /规格名称|销售价|市场价|原价|sku名称|规格信息|^名称$|计算价格/.test(first.innerText || "")) {
+      return Array.from(first.querySelectorAll("th, td, .el-table__cell")).map(cellValue);
+    }
+    return [];
+  }
+
+  function skuBodyRows(root) {
+    const wrap =
+      (root.closest && root.closest(".layui-table-view, .layui-table-box, .el-table")) ||
+      root;
+    let rows = Array.from(
+      wrap.querySelectorAll(".layui-table-body tbody tr, .el-table__body .el-table__row, tbody tr")
+    );
+    if (!rows.length) {
+      rows = Array.from(wrap.querySelectorAll("tr")).filter((tr) => skuCells(tr).length);
+    }
+    return rows.filter((tr) => {
+      if (tr.querySelector("th")) return false;
+      const head = (tr.innerText || "").replace(/\s+/g, "");
+      return !/规格名称|SKU名称/.test(head.slice(0, 24));
+    });
+  }
+
+  function skuCells(tr) {
+    const tds = Array.from(tr.querySelectorAll("td"));
+    if (tds.length) return tds;
+    return Array.from(tr.querySelectorAll(":scope > .el-table__cell, :scope > div"));
+  }
+
+  function looksLikeSpecName(t) {
+    const s = String(t || "").replace(/\s+/g, " ").trim();
+    if (!s || /^\d+$/.test(s) || /^\d+(\.\d+)?$/.test(s) || /^[¥￥]/.test(s)) return false;
+    if (/规格名称|销售价|市场价|原价|库存|商家编码|查询中|加载中/.test(s)) return false;
+    return s.length >= 1 && s.length <= 80;
   }
 
   function colIndex(headers, keys) {
@@ -242,6 +344,10 @@
       for (let i = 0; i < headers.length; i++) {
         const h = String(headers[i] || "").replace(/\s+/g, "");
         if (!h) continue;
+        if (key === "名称") {
+          if (h === "名称" || h === "SKU名称" || h === "规格名称") return i;
+          continue;
+        }
         if (key === "价格" && h.indexOf("市场") >= 0) continue;
         if (h === key || h.indexOf(key) >= 0) return i;
       }
@@ -273,7 +379,7 @@
   function dedupeSkuRows(rows) {
     const map = new Map();
     rows.forEach((row) => {
-      const key = row.name;
+      const key = (row.specName || "") + "\0" + (row.specValue || row.name || "");
       const prev = map.get(key);
       if (!prev || (row.price > 0 && !(prev.price > 0))) map.set(key, row);
     });
@@ -305,6 +411,15 @@
   function num(v) {
     const n = Number(String(v || "").replace(/,/g, "").replace(/[^\d.]/g, ""));
     return isFinite(n) ? n : 0;
+  }
+
+  /** SKU 工具库存为「-」或无数字时按 0 */
+  function parseStock(v) {
+    const text = String(v || "").replace(/\s+/g, "").trim();
+    if (!text || /^(?:-|—|–|\*|无|无库存|空)$/.test(text)) return 0;
+    const n = Number(text.replace(/,/g, "").replace(/[^\d.]/g, ""));
+    if (!isFinite(n) || n < 0) return 0;
+    return Math.round(n);
   }
 
   function bodyText() {
@@ -526,18 +641,22 @@
     };
   }
 
+  /** 与 web/src/utils/skuCsvImport.ts 一致：规格值取冒号后，规格名固定「商品规格」 */
+  var DEFAULT_SPEC_NAME = "商品规格";
+
   function parseSkuName(skuName) {
-    const text = String(skuName || "").replace(/\s+/g, " ").trim();
+    const text = String(skuName || "")
+      .replace(/\uFEFF/g, "")
+      .replace(/\t/g, "")
+      .trim();
     const idxAscii = text.indexOf(":");
     const idxFull = text.indexOf("：");
     let splitAt = -1;
     if (idxAscii >= 0 && idxFull >= 0) splitAt = Math.min(idxAscii, idxFull);
     else if (idxAscii >= 0) splitAt = idxAscii;
     else if (idxFull >= 0) splitAt = idxFull;
-    if (splitAt <= 0) return { specName: "商品规格", specValue: text };
-    const specName = text.slice(0, splitAt).trim() || "商品规格";
-    const specValue = text.slice(splitAt + 1).trim();
-    return { specName, specValue: specValue || text };
+    const specValue = splitAt <= 0 ? text : text.slice(splitAt + 1).trim();
+    return { specName: DEFAULT_SPEC_NAME, specValue: specValue || text };
   }
 
   function nextSkuCode(used) {
@@ -558,11 +677,13 @@
     const byKey = new Map();
     rows.forEach((row, i) => {
       const parsed = parseSkuName(row.name || "");
-      if (!parsed.specValue) return;
+      const specName = DEFAULT_SPEC_NAME;
+      const specValue = String(row.specValue || parsed.specValue || "").trim();
+      if (!specValue) return;
       const pic = row.pic || skuPics[i] || "";
       const item = {
-        specName: parsed.specName,
-        specValue: parsed.specValue,
+        specName,
+        specValue,
         pic,
         price: row.price || 0,
         marketPrice: row.originalPrice || row.price || 0,
