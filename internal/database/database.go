@@ -52,6 +52,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.PlatformListing{},
 		&model.PlatformSkuMapping{},
 		&model.ProductEditDraft{},
+		&model.ProductCollectTask{},
 	); err != nil {
 		return err
 	}

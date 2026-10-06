@@ -12,6 +12,7 @@ type Repos struct {
 	PlatformType    *PlatformTypeRepo
 	PlatformShop    *PlatformShopRepo
 	PlatformListing *PlatformListingRepo
+	ProductCollect  *ProductCollectRepo
 }
 
 func New(db *gorm.DB) *Repos {
@@ -24,5 +25,6 @@ func New(db *gorm.DB) *Repos {
 		PlatformType:    NewPlatformTypeRepo(db),
 		PlatformShop:    NewPlatformShopRepo(db),
 		PlatformListing: NewPlatformListingRepo(db),
+		ProductCollect:  NewProductCollectRepo(db),
 	}
 }

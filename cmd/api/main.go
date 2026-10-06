@@ -26,6 +26,8 @@
 //	@tag.description	电商平台类型
 //	@tag.name		admin-平台店铺
 //	@tag.description	平台店铺与铺货
+//	@tag.name		admin-采集
+//	@tag.description	电商商品链接采集，下发到 WindowsAgent
 //	@tag.name		open-商品
 //	@tag.description	对外 Open API（只读，已上架商品）
 package main

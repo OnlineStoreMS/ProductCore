@@ -18,6 +18,10 @@ auth:
   enabled: true
   jwt_secret: "change-me-in-production-use-long-random-string"
 
+integrations:
+  agentscenter_api_url: "http://127.0.0.1:8107"
+  agentscenter_internal_token: ""
+
 storage:
   driver: minio                  # local | minio
   prefix: "uploads"

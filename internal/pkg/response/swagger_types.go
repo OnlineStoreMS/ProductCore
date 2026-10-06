@@ -150,3 +150,22 @@ type EmptyResp struct {
 	Code    int    `json:"code" example:"200"`
 	Message string `json:"message" example:"success"`
 }
+
+type ProductCollectTaskResp struct {
+	Code    int                       `json:"code" example:"200"`
+	Message string                    `json:"message" example:"success"`
+	Data    dto.ProductCollectTaskDTO `json:"data"`
+}
+
+type ProductCollectPageData struct {
+	List     []dto.ProductCollectTaskDTO `json:"list"`
+	Total    int64                       `json:"total"`
+	Page     int                         `json:"page"`
+	PageSize int                         `json:"pageSize"`
+}
+
+type ProductCollectPageResp struct {
+	Code    int                    `json:"code" example:"200"`
+	Message string                 `json:"message" example:"success"`
+	Data    ProductCollectPageData `json:"data"`
+}

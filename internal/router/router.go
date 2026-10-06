@@ -7,6 +7,7 @@ import (
 	"productcore/internal/cache"
 	"productcore/internal/config"
 	"productcore/internal/event"
+	"productcore/internal/integrations/agentscenter"
 	jwtmgr "productcore/internal/pkg/jwt"
 	"productcore/internal/repo"
 	"productcore/internal/service"
@@ -54,6 +55,10 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 	platformTypeH := admin.NewPlatformTypeHandler(platformTypeSvc)
 	platformShopH := admin.NewPlatformShopHandler(platformShopSvc, listingSvc)
 	uploadH := admin.NewUploadHandler(store)
+	collectH := admin.NewProductCollectHandler(service.NewProductCollectService(
+		repos,
+		agentscenter.NewClient(cfg.Integrations.AgentsCenterAPIURL, cfg.Integrations.AgentsCenterToken),
+	))
 	openProductH := openapi.NewProductHandler(productSvc)
 	openCategoryH := openapi.NewCategoryHandler(categorySvc)
 
@@ -67,13 +72,13 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 	adminGroup := v1.Group("/admin")
 	jwtMgr := jwtmgr.NewManager(cfg.Auth.JWTSecret)
 	adminGroup.Use(adminmw.AdminAuth(&cfg.Auth, jwtMgr))
-	admin.RegisterRoutes(adminGroup, productH, brandH, categoryH, groupH, keywordH, uploadH, importH, platformTypeH, platformShopH)
+	admin.RegisterRoutes(adminGroup, productH, brandH, categoryH, groupH, keywordH, uploadH, importH, platformTypeH, platformShopH, collectH)
 
 	openapi.RegisterRoutes(v1.Group("/open"), openProductH, openCategoryH)
 
 	legacy := v1.Group("")
 	legacy.Use(adminmw.AdminAuth(&cfg.Auth, jwtMgr))
-	admin.RegisterRoutes(legacy, productH, brandH, categoryH, groupH, keywordH, uploadH, importH, platformTypeH, platformShopH)
+	admin.RegisterRoutes(legacy, productH, brandH, categoryH, groupH, keywordH, uploadH, importH, platformTypeH, platformShopH, collectH)
 
 	return r
 }

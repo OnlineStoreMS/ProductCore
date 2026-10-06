@@ -8,12 +8,13 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	Redis    RedisConfig
-	Auth     AuthConfig
-	Storage  StorageConfig
-	CORS     CORSConfig
+	Server       ServerConfig
+	Database     DatabaseConfig
+	Redis        RedisConfig
+	Auth         AuthConfig
+	Integrations IntegrationsConfig
+	Storage      StorageConfig
+	CORS         CORSConfig
 }
 
 type ServerConfig struct {
@@ -41,11 +42,16 @@ type AuthConfig struct {
 	JWTSecret string `mapstructure:"jwt_secret"`
 }
 
+type IntegrationsConfig struct {
+	AgentsCenterAPIURL string `mapstructure:"agentscenter_api_url"`
+	AgentsCenterToken  string `mapstructure:"agentscenter_internal_token"`
+}
+
 type StorageConfig struct {
-	Driver        string // local | minio
-	LocalPath     string `mapstructure:"local_path"`
-	Prefix        string // 资源根前缀，local/minio 目录规则一致，默认 uploads
-	PublicBaseURL string `mapstructure:"public_base_url"`
+	Driver        string      // local | minio
+	LocalPath     string      `mapstructure:"local_path"`
+	Prefix        string      // 资源根前缀，local/minio 目录规则一致，默认 uploads
+	PublicBaseURL string      `mapstructure:"public_base_url"`
 	MinIO         MinIOConfig `mapstructure:"minio"`
 }
 

@@ -24,6 +24,7 @@ const router = createRouter({
       children: [
         { path: 'dashboard', name: 'Dashboard', component: () => import('../views/Dashboard.vue'), meta: { title: '工作台' } },
         { path: 'products', name: 'ProductList', component: () => import('../views/product/ProductList.vue'), meta: { title: '商品列表' } },
+        { path: 'product-collect', name: 'ProductCollect', component: () => import('../views/product/ProductCollect.vue'), meta: { title: '商品采集' } },
         { path: 'products/drafts', name: 'ProductDrafts', component: () => import('../views/product/ProductDraftList.vue'), meta: { title: '商品草稿箱' } },
         { path: 'products/trash', name: 'ProductTrash', component: () => import('../views/product/ProductTrashList.vue'), meta: { title: '商品回收站' } },
         { path: 'products/create', name: 'ProductCreate', component: () => import('../views/product/ProductEdit.vue'), meta: { title: '添加商品' } },
