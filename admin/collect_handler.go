@@ -48,6 +48,33 @@ func (h *ProductCollectHandler) Create(c *gin.Context) {
 	response.OK(c, task)
 }
 
+// Ingest godoc
+//
+//	@Summary		扩展回传入库
+//	@Description	浏览器扩展在人工点至尊宝工具后，把汇总的商品草稿写入商品管理系统
+//	@Tags			admin-采集
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		dto.IngestProductCollectRequest	true	"采集结果"
+//	@Success		200		{object}	response.ProductCollectTaskResp
+//	@Failure		400		{object}	response.Body
+//	@Failure		500		{object}	response.Body
+//	@Router			/admin/product-collects/ingest [post]
+func (h *ProductCollectHandler) Ingest(c *gin.Context) {
+	var in dto.IngestProductCollectRequest
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, "请提交采集到的商品数据")
+		return
+	}
+	task, err := h.svc.IngestFromExtension(authcontext.TenantID(c), authcontext.UserID(c), in.ProductURL, in.Product)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, task)
+}
+
 // List godoc
 //
 //	@Summary		采集任务列表

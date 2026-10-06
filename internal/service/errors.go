@@ -23,4 +23,5 @@ var (
 	ErrNoCollectAgent           = errors.New("没有在线且已启用「电商商品采集」的电脑。请在采集电脑托盘的「本机能力」里新建并启用")
 	ErrCollectAgentOutdated     = errors.New("在线电脑还没有启用「电商商品采集」。请在采集电脑托盘的「本机能力」里新建，选好浏览器并启用")
 	ErrAgentsCenterUnconfigured = errors.New("AgentsCenter 未配置，无法下发采集任务")
+	ErrCollectEmpty             = errors.New("采集结果缺少标题或主图，无法入库")
 )

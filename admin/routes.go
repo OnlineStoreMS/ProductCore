@@ -84,4 +84,5 @@ func RegisterRoutes(
 
 	g.GET("/product-collects", collectH.List)
 	g.POST("/product-collects", collectH.Create)
+	g.POST("/product-collects/ingest", collectH.Ingest)
 }

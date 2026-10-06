@@ -63,6 +63,78 @@ func (s *ProductCollectService) Create(tenantID, userID uint64, productURL strin
 	return &dtoTask, nil
 }
 
+func (s *ProductCollectService) IngestFromExtension(tenantID, userID uint64, productURL string, product *dto.ProductDTO) (*dto.ProductCollectTaskDTO, error) {
+	tenantID = repo.NormalizeTenantID(tenantID)
+	if product == nil {
+		return nil, ErrCollectEmpty
+	}
+	name := strings.TrimSpace(product.Name)
+	if name == "" || strings.Contains(name, "评价") {
+		return nil, ErrCollectEmpty
+	}
+	if strings.TrimSpace(product.Pic) == "" && len(product.AlbumPics) == 0 && len(product.Skus) == 0 {
+		return nil, ErrCollectEmpty
+	}
+
+	platform, normalized, err := DetectCollectPlatform(productURL)
+	if err != nil {
+		sn := strings.TrimSpace(product.ProductSn)
+		if sn == "" {
+			return nil, err
+		}
+		platform = "taobao"
+		if strings.EqualFold(strings.TrimSpace(product.Source), "tmall") {
+			platform = "taobao"
+		}
+		normalized = "https://item.taobao.com/item.htm?id=" + sn
+	}
+
+	product.BrandID = 0
+	product.CategoryID = 0
+	product.IsDraft = 1
+	product.PublishStatus = 0
+	if strings.TrimSpace(product.Source) == "" {
+		product.Source = platform
+	}
+	if strings.TrimSpace(product.Unit) == "" {
+		product.Unit = "件"
+	}
+
+	detailN := 0
+	if product.Media != nil {
+		detailN = len(product.Media.DetailPics)
+	}
+	msg := "扩展采集「" + name + "」主图" + jsonNumber(uint64(len(product.AlbumPics))) +
+		" 详情" + jsonNumber(uint64(detailN)) + " SKU" + jsonNumber(uint64(len(product.Skus)))
+	payload := map[string]any{
+		"platform":   platform,
+		"productUrl": normalized,
+		"source":     "extension",
+		"message":    msg,
+		"product":    product,
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	task := &model.ProductCollectTask{
+		TenantID:   tenantID,
+		UserID:     userID,
+		ProductURL: normalized,
+		Platform:   platform,
+		AgentName:  "浏览器扩展",
+		Status:     "succeeded",
+		ResultJSON: string(raw),
+	}
+	if err := s.repos.ProductCollect.Create(task); err != nil {
+		return nil, err
+	}
+	s.ingestIfNeeded(tenantID, task)
+	dtoTask := toCollectDTO(*task)
+	return &dtoTask, nil
+}
+
 func (s *ProductCollectService) List(tenantID uint64, page, pageSize int) ([]dto.ProductCollectTaskDTO, int64, error) {
 	tenantID = repo.NormalizeTenantID(tenantID)
 	list, total, err := s.repos.ProductCollect.List(tenantID, page, pageSize)

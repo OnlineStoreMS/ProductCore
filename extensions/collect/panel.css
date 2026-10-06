@@ -1,0 +1,112 @@
+#pc-collect-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483646;
+  width: 320px;
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 13px;
+  color: #1f2937;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+}
+
+#pc-collect-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #111827;
+  color: #fff;
+  font-weight: 600;
+}
+
+#pc-collect-panel header button {
+  border: 0;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+#pc-collect-panel .body {
+  padding: 12px;
+}
+
+#pc-collect-panel .hint {
+  color: #4b5563;
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+#pc-collect-panel .meta {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 8px;
+  word-break: break-all;
+}
+
+#pc-collect-panel .counts {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+#pc-collect-panel .counts div {
+  background: #f3f4f6;
+  border-radius: 6px;
+  padding: 8px 6px;
+  text-align: center;
+}
+
+#pc-collect-panel .counts b {
+  display: block;
+  font-size: 16px;
+  color: #111827;
+}
+
+#pc-collect-panel .ok {
+  color: #047857;
+}
+
+#pc-collect-panel .wait {
+  color: #b45309;
+}
+
+#pc-collect-panel .err {
+  color: #b91c1c;
+  margin-top: 8px;
+}
+
+#pc-collect-panel .actions {
+  display: flex;
+  gap: 8px;
+}
+
+#pc-collect-panel .actions button {
+  flex: 1;
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+#pc-collect-panel .actions .upload {
+  background: #2563eb;
+  color: #fff;
+}
+
+#pc-collect-panel .actions .upload:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+#pc-collect-panel .actions .reset {
+  background: #e5e7eb;
+  color: #111827;
+}

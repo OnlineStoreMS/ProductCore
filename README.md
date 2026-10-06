@@ -16,6 +16,7 @@ ProductCore/
 ├── cmd/api/     # 服务入口
 ├── configs/     # Viper 配置
 ├── web/         # 管理后台前端
+├── extensions/  # 浏览器扩展（至尊宝人工采集）
 ├── deploy/      # Docker PostgreSQL/Redis
 └── docs/
 ```
@@ -46,11 +47,13 @@ cd web && npm install && npm run dev
 - 管理后台：http://localhost:5173  
 - Admin API：http://localhost:8090/api/v1/admin/*  
 - Open API：http://localhost:8090/api/v1/open/*  
+- 采集扩展：见 [extensions/collect/README.md](./extensions/collect/README.md)  
 
 ## 进度
 
 - [x] 管理后台 UI（Vue 3 + Element Plus）
 - [x] Go REST API（商品/品牌/分类/分组/SKU）
+- [x] 浏览器扩展采集（人工点至尊宝，回写草稿）
 - [x] repo 分层 + Admin/Open API 分离
 - [x] Redis 商品缓存 + 变更事件（Stream）
 - [x] 本地/MinIO 图片上传

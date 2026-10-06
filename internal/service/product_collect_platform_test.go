@@ -1,6 +1,10 @@
 package service
 
-import "testing"
+import (
+	"testing"
+
+	"productcore/internal/dto"
+)
 
 func TestDetectCollectPlatform(t *testing.T) {
 	ok := []string{
@@ -31,5 +35,15 @@ func TestDetectCollectPlatform(t *testing.T) {
 		if _, _, err := DetectCollectPlatform(raw); err == nil {
 			t.Fatalf("expected reject: %q", raw)
 		}
+	}
+}
+
+func TestIngestFromExtensionEmpty(t *testing.T) {
+	s := &ProductCollectService{}
+	if _, err := s.IngestFromExtension(1, 1, "", nil); err != ErrCollectEmpty {
+		t.Fatalf("nil product: %v", err)
+	}
+	if _, err := s.IngestFromExtension(1, 1, "https://item.taobao.com/item.htm?id=1", &dto.ProductDTO{Name: "x"}); err != ErrCollectEmpty {
+		t.Fatalf("no pics: %v", err)
 	}
 }
