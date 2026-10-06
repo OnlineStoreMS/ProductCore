@@ -6,16 +6,39 @@
   document.addEventListener(
     "click",
     (ev) => {
-      const t = ((ev.target && (ev.target.innerText || ev.target.textContent)) || "").replace(/\s+/g, "");
-      if (t.indexOf("手机端主图视频SKU") >= 0 || t.indexOf("主图视频SKU") >= 0) {
-        report({ clickedMedia: true });
+      if (ev.target && ev.target.closest && ev.target.closest("#pc-collect-panel")) return;
+      const bar = findZzbTitleBar(ev.target);
+      if (bar) {
+        const btn = clickLabel(ev.target);
+        if (!btn || /标题|链\+标/.test(btn)) {
+          const title = titleNearBar(bar) || extractZzbTitle();
+          report({ clickedTitle: true, title: title || undefined, fromZzb: true });
+        }
+        return;
       }
-      if (t.indexOf("SKU工具") >= 0) {
+      const t = clickLabel(ev.target);
+      if (!t || t.length > 20) return;
+      if (t === "手机端主图视频SKU" || t === "主图视频SKU" || t === "手机端主图视频") {
+        report({ clickedMedia: true });
+        return;
+      }
+      if (t === "SKU工具") {
         report({ clickedSku: true });
       }
-      if (t.indexOf("悬浮标题") >= 0 || (t.indexOf("标题采集") >= 0 && t.indexOf("主图") < 0)) {
-        report({ clickedTitle: true });
-      }
+    },
+    true
+  );
+
+  document.addEventListener(
+    "copy",
+    (ev) => {
+      let text = "";
+      try {
+        text = (ev.clipboardData && ev.clipboardData.getData("text/plain")) || "";
+      } catch (e) {}
+      if (!text && window.getSelection) text = String(window.getSelection());
+      const title = titleFromCopiedText(text);
+      if (title) report({ title: title, fromZzb: true, clickedTitle: true });
     },
     true
   );
@@ -34,7 +57,8 @@
     if (/item\.taobao\.com|detail\.tmall\.com/i.test(href)) {
       payload.url = href;
     }
-    Object.assign(payload, extractTitle());
+    const id = (href.match(/[?&]id=(\d+)/) || [])[1] || "";
+    if (id) payload.itemId = id;
     const media = extractMedia();
     if (media.images.length || media.videos.length) {
       payload.images = media.images;
@@ -42,7 +66,7 @@
     }
     const skus = extractSkus();
     if (skus.length) payload.skus = skus;
-    if (payload.title || payload.images || payload.skus || payload.videos) {
+    if (payload.images || payload.skus || payload.videos || payload.itemId || payload.url) {
       report(payload);
     }
   }
@@ -50,19 +74,21 @@
   function looksLikeTitle(raw) {
     const t = cleanTitle(raw);
     if (t.length < 8 || t.length > 200) return "";
-    if (
-      /验证码|评价|销量|收藏|购物车|登录|资源一键下载|手机端主图|SKU工具|数据工具|全选 \(|详情页/.test(
-        t
-      )
-    ) {
-      return "";
-    }
+    if (/^tb\d{4,}/i.test(t) || /^[a-z]{1,4}\d{5,}(_\d+)?$/i.test(t)) return "";
+    if (isTitleJunk(t)) return "";
     return t;
+  }
+
+  function isTitleJunk(t) {
+    return /验证码|评价|销量|收藏|购物车|登录|资源一键下载|手机端主图|SKU工具|数据工具|全选 \(|详情页|网页无障碍|无障碍|好评率|满意度|回头率|88VIP|小时发货|平均\d|物流服务|描述相符|服务态度/.test(
+      t
+    ) || (t.match(/%/g) || []).length >= 2;
   }
 
   function cleanTitle(raw) {
     let t = String(raw || "")
       .replace(/\uFEFF/g, "")
+      .replace(/[\uE000-\uF8FF]/g, "")
       .replace(/\s+/g, " ")
       .trim();
     t = t.replace(/[-|｜]?\s*(淘宝网|天猫|tmall\.com).*$/i, "").trim();
@@ -71,50 +97,109 @@
     return t.replace(/\s+/g, " ").trim();
   }
 
-  function extractTitle() {
-    const out = {};
-    const id = (href.match(/[?&]id=(\d+)/) || [])[1] || "";
-    if (id) out.itemId = id;
-    const zzb = extractZzbTitle();
-    if (zzb) {
-      out.title = zzb.slice(0, 200);
-      out.fromZzb = true;
+  function clickLabel(el) {
+    let n = el;
+    for (let i = 0; i < 5 && n; i++, n = n.parentElement) {
+      if (!n || n === document.body || n === document.documentElement) break;
+      if (n.id === "pc-collect-panel" || (n.closest && n.closest("#pc-collect-panel"))) return "";
+      const t = String(n.innerText || n.textContent || "").replace(/\s+/g, "").trim();
+      if (t && t.length > 0 && t.length <= 24) return t;
     }
-    return out;
+    return "";
   }
 
   function extractZzbTitle() {
     const cands = [];
     collectRoots().forEach((root) => {
       if (!root.querySelectorAll) return;
-      const layers = Array.from(
-        root.querySelectorAll(
-          ".layui-layer, .layui-layer-content, .el-dialog, .el-message-box, .ant-modal"
-        )
-      );
-      const scopes = layers.length ? layers : [root];
-      scopes.forEach((scope) => {
-        if (scope.id === "pc-collect-panel" || (scope.closest && scope.closest("#pc-collect-panel"))) return;
-        const overlay = String(scope.innerText || "").replace(/\s+/g, " ");
-        const inTitleUi = layers.length > 0 || /悬浮标题|标题采集|商品标题/.test(overlay);
-        scope.querySelectorAll("input, textarea").forEach((el) => {
-          if (el.closest && el.closest("#pc-collect-panel")) return;
-          const ph = String(el.placeholder || el.name || el.getAttribute("aria-label") || "");
-          if (/SKU|搜索|查询|价格|库存|品牌|分类/.test(ph)) return;
-          if (!inTitleUi && !/标题/.test(ph)) return;
-          const t = looksLikeTitle(el.value);
-          if (t) cands.push(t);
-        });
-        const text = String(scope.innerText || "").replace(/\r/g, "");
-        const labeled = text.match(/(?:商品标题|标题)[:：]\s*([^\n]{8,200})/);
-        if (labeled) {
-          const t = looksLikeTitle(labeled[1]);
-          if (t) cands.push(t);
-        }
-      });
+      const bar = findZzbTitleBar(root) || findZzbTitleBarIn(root);
+      if (bar) {
+        const t = titleNearBar(bar);
+        if (t) cands.push(t);
+      }
     });
     cands.sort((a, b) => b.length - a.length);
     return cands[0] || "";
+  }
+
+  function findZzbTitleBar(el) {
+    let p = el;
+    for (let i = 0; i < 10 && p; i++, p = p.parentElement) {
+      if (isZzbTitleBar(p)) return p;
+    }
+    return null;
+  }
+
+  function findZzbTitleBarIn(root) {
+    const nodes = root.querySelectorAll("div, span, ul, p, a, button");
+    for (let i = 0; i < nodes.length; i++) {
+      if (isZzbTitleBar(nodes[i])) return nodes[i];
+    }
+    return null;
+  }
+
+  function isZzbTitleBar(el) {
+    if (!el || el.id === "pc-collect-panel") return false;
+    const t = String(el.innerText || "").replace(/\s+/g, "");
+    if (t.length < 8 || t.length > 40) return false;
+    return /标题/.test(t) && /链接/.test(t) && (/链\+标/.test(t) || /找相似/.test(t));
+  }
+
+  function titleNearBar(bar) {
+    let node = bar;
+    for (let d = 0; d < 8 && node; d++, node = node.parentElement) {
+      const lines = String(node.innerText || "")
+        .split(/\n+/)
+        .map((x) => x.replace(/\s+/g, " ").trim())
+        .filter(Boolean);
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const compact = line.replace(/\s+/g, "");
+        if (isZzbTitleBarText(compact)) continue;
+        if (/^已售/.test(compact) || /^tb\d/i.test(compact) || /找相似|商品ID|链\+标|网页无障碍/.test(compact)) continue;
+        const t = looksLikeTitle(stripTitleBadges(line));
+        if (t) {
+          const next = lines[i + 1] || "";
+          const nextCompact = next.replace(/\s+/g, "");
+          if (
+            next &&
+            next.length < 40 &&
+            !/^已售/.test(nextCompact) &&
+            !isZzbTitleBarText(nextCompact) &&
+            looksLikeTitle(stripTitleBadges(next))
+          ) {
+            const joined = looksLikeTitle(stripTitleBadges(t + next));
+            if (joined) return joined;
+          }
+          return t;
+        }
+      }
+    }
+    return "";
+  }
+
+  function isZzbTitleBarText(compact) {
+    return /标题/.test(compact) && /链接/.test(compact);
+  }
+
+  function stripTitleBadges(raw) {
+    return String(raw || "")
+      .replace(/^\s*(?:酷动城|买手|官方|旗舰店)\s+/g, "")
+      .replace(/^\s*\S{2,6}买手\s+/, "")
+      .trim();
+  }
+
+  function titleFromCopiedText(raw) {
+    const lines = String(raw || "")
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (let i = 0; i < lines.length; i++) {
+      if (/^https?:\/\//i.test(lines[i]) || /^\d{8,}$/.test(lines[i])) continue;
+      const t = looksLikeTitle(stripTitleBadges(lines[i]));
+      if (t) return t;
+    }
+    return looksLikeTitle(stripTitleBadges(String(raw || "").replace(/https?:\/\/\S+/g, "")));
   }
 
   function extractMedia() {
@@ -508,7 +593,7 @@
     box.innerHTML =
       '<header>商品采集 <button type="button" data-act="hide">×</button></header>' +
       '<div class="body">' +
-      '<div class="hint" id="pc-hint">请点至尊宝「悬浮标题采集」，再点「手机端主图视频SKU」。</div>' +
+      '<div class="hint" id="pc-hint">请点商品标题上方至尊宝悬浮条里的「标题」，再点「手机端主图视频SKU」。</div>' +
       '<div class="meta" id="pc-title"></div>' +
       '<div class="counts">' +
       '<div><b id="pc-main">0</b>主图</div>' +
@@ -603,20 +688,23 @@
     const panel = document.getElementById("pc-collect-panel");
     if (!panel || !state) return;
     const c = counts(state);
-    panel.querySelector("#pc-title").textContent = state.title || state.url || "";
+    panel.querySelector("#pc-title").textContent = state.title || "";
     panel.querySelector("#pc-main").textContent = String(c.main);
     panel.querySelector("#pc-detail").textContent = String(c.detail);
     panel.querySelector("#pc-sku").textContent = String(c.sku);
     if (panel.querySelector("#pc-video")) panel.querySelector("#pc-video").textContent = String(c.video);
-    let hint = "请点至尊宝「悬浮标题采集」，再点「手机端主图视频SKU」。";
-    if (state.clickedTitle && !state.title) hint = "已点标题采集，正在等标题…";
-    if (state.title) hint = "标题已抓到。请点至尊宝「手机端主图视频SKU」。";
-    if (c.main > 0) hint = "主图已抓到。请再点「SKU工具」抓规格表。";
-    if (c.main > 0 && c.video > 0) hint = "主图和视频已抓到。请再点「SKU工具」抓规格表。";
-    if (c.main > 0 && c.sku > 0) hint = "可以上传了。先选品牌和分类，再点上传。";
-    if (c.main > 0 && c.sku > 0 && c.video > 0) hint = "可以上传了。视频会按 1:1 / 3:4 / 16:9 / 9:16 入库。";
-    if (state.clickedMedia && c.main === 0) hint = "已点主图工具，正在等弹层加载…";
-    if (state.clickedSku && c.sku === 0) hint = "已点 SKU 工具，正在等规格表加载…";
+    let hint = "请点商品标题上方至尊宝悬浮条里的「标题」，再点「手机端主图视频SKU」。";
+    if (!state.title) {
+      if (state.clickedTitle) hint = "已点标题，正在读取…";
+    } else {
+      hint = "标题已抓到。请点至尊宝「手机端主图视频SKU」。";
+      if (state.clickedMedia && c.main === 0) hint = "已点主图工具，正在等弹层加载…";
+      if (c.main > 0) hint = "主图已抓到。请再点「SKU工具」抓规格表。";
+      if (c.main > 0 && c.video > 0) hint = "主图和视频已抓到。请再点「SKU工具」抓规格表。";
+      if (c.main > 0 && c.sku > 0) hint = "可以上传了。先选品牌和分类，再点上传。";
+      if (c.main > 0 && c.sku > 0 && c.video > 0) hint = "可以上传了。视频会按 1:1 / 3:4 / 16:9 / 9:16 入库。";
+      if (state.clickedSku && c.sku === 0) hint = "已点 SKU 工具，正在等规格表加载…";
+    }
     panel.querySelector("#pc-hint").textContent = hint;
     panel.querySelector("#pc-hint").className = "hint " + (c.main > 0 ? "ok" : "wait");
     panel.querySelector("#pc-upload").disabled = !(state.title && c.main > 0);
@@ -682,9 +770,9 @@
     return {
       name: state.title || "未命名商品",
       subTitle: "",
-      materialCode: "",
+      materialCode: itemId,
       source: "淘宝",
-      productSn: itemId,
+      productSn: "",
       brandId: brandId,
       categoryId: categoryId,
       pic: main[0] || "",
