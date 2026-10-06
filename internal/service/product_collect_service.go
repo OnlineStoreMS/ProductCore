@@ -199,24 +199,36 @@ func (s *ProductCollectService) ingestIfNeeded(tenantID uint64, task *model.Prod
 	if created == nil {
 		return
 	}
-	if n, skipped, vErr := products.ingestRemoteVideos(created.ID, urls); vErr != nil {
-		s.patchCollectJSON(task, payload, created.ID, "视频上传失败："+vErr.Error())
-		return
-	} else if n > 0 || skipped > 0 {
-		var msg string
-		if rawMsg, ok := payload["message"]; ok {
-			_ = json.Unmarshal(rawMsg, &msg)
+	var msg string
+	if rawMsg, ok := payload["message"]; ok {
+		_ = json.Unmarshal(rawMsg, &msg)
+	}
+	if imgOK, imgFailed, imgErr := products.ingestRemoteImages(created.ID, &in); imgOK > 0 || imgFailed > 0 || imgErr != nil {
+		if imgOK > 0 {
+			msg += "，已转存图片" + jsonNumber(uint64(imgOK))
 		}
+		if imgFailed > 0 {
+			msg += "，图片失败" + jsonNumber(uint64(imgFailed))
+		}
+		if imgErr != nil {
+			msg += "：" + imgErr.Error()
+		}
+	}
+	ingestErr := ""
+	if n, skipped, vErr := products.ingestRemoteVideos(created.ID, urls); vErr != nil {
+		ingestErr = "视频上传失败：" + vErr.Error()
+	} else if n > 0 || skipped > 0 {
 		if n > 0 {
 			msg += "，已上传视频" + jsonNumber(uint64(n))
 		}
 		if skipped > 0 {
 			msg += "（跳过" + jsonNumber(uint64(skipped)) + "个比例不符或无法下载）"
 		}
-		b, _ := json.Marshal(msg)
+	}
+	if b, err := json.Marshal(msg); err == nil {
 		payload["message"] = b
 	}
-	s.patchCollectJSON(task, payload, created.ID, "")
+	s.patchCollectJSON(task, payload, created.ID, ingestErr)
 }
 
 func (s *ProductCollectService) patchCollectJSON(task *model.ProductCollectTask, payload map[string]json.RawMessage, productID uint64, ingestErr string) {

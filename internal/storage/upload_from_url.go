@@ -36,7 +36,8 @@ func UploadFromURL(store Storage, rawURL string, opts UploadOptions) (string, er
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", "ProductCore/1.0")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ProductCore/1.0")
+	req.Header.Set("Referer", "https://item.taobao.com/")
 
 	resp, err := uploadFromURLClient.Do(req)
 	if err != nil {

@@ -244,6 +244,12 @@ func (r *ProductRepo) DeleteSkusByProduct(productID uint64) error {
 	return r.db.Unscoped().Scopes(scopeTenant(r.tenantID)).Where("product_id = ?", productID).Delete(&model.Sku{}).Error
 }
 
+func (r *ProductRepo) UpdateSkuPic(productID uint64, skuCode, pic string) error {
+	return r.db.Scopes(scopeTenant(r.tenantID)).Model(&model.Sku{}).
+		Where("product_id = ? AND sku_code = ?", productID, skuCode).
+		Updates(map[string]interface{}{"pic": pic}).Error
+}
+
 func (r *ProductRepo) CreateSku(sku *model.Sku) error {
 	sku.TenantID = r.TenantID()
 	return r.db.Create(sku).Error
