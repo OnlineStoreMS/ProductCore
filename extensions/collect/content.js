@@ -11,7 +11,7 @@
       if (bar) {
         const btn = clickLabel(ev.target);
         if (!btn || /标题|链\+标/.test(btn)) {
-          const title = titleNearBar(bar) || extractZzbTitle();
+          const title = zzbStoredTitle() || titleNearBar(bar) || extractZzbTitle();
           report({ clickedTitle: true, title: title || undefined, fromZzb: true });
         }
         return;
@@ -59,16 +59,106 @@
     }
     const id = (href.match(/[?&]id=(\d+)/) || [])[1] || "";
     if (id) payload.itemId = id;
+    const stored = harvestZzbStore();
     const media = extractMedia();
-    if (media.images.length || media.videos.length) {
-      payload.images = media.images;
-      payload.videos = media.videos;
-    }
-    const skus = extractSkus();
+    const images = stored.images.length ? stored.images : media.images;
+    const videos = stored.videos.length ? stored.videos : media.videos;
+    if (images.length) payload.images = images;
+    if (videos.length) payload.videos = videos;
+    const skus = stored.skus.length ? stored.skus : extractSkus();
     if (skus.length) payload.skus = skus;
+    if (stored.storedTitle) payload.zzbTitle = stored.storedTitle;
     if (payload.images || payload.skus || payload.videos || payload.itemId || payload.url) {
       report(payload);
     }
+  }
+
+  function lsJson(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function zzbSpecValue(name) {
+    const s = String(name || "").trim();
+    const wrapped = s.match(/^商品规格[（(](.+)[）)]$/);
+    if (wrapped) return wrapped[1].trim();
+    return parseSkuName(s).specValue;
+  }
+
+  function zzbStoredTitle() {
+    const pack = lsJson("sku复制传值数据");
+    const t = pack && pack.myItemInfo && pack.myItemInfo.item && pack.myItemInfo.item.title;
+    return looksLikeTitle(t);
+  }
+
+  /** 至尊宝 iframe localStorage.fileList_tb：cateType 1主图 2SKU 3详情 4视频 */
+  function harvestZzbStore() {
+    const images = [];
+    const videos = [];
+    const skus = [];
+    const seenImg = {};
+    const addImg = (src, kind) => {
+      const u = clean(src);
+      if (!u || seenImg[u] || !isProductImage(u)) return;
+      seenImg[u] = 1;
+      images.push({ src: u, kind: kind || "main" });
+    };
+    const addVid = (src) => {
+      const u = cleanVideo(src);
+      if (!u) return;
+      for (let i = 0; i < videos.length; i++) {
+        if (videos[i] === u || (videos[i] && videos[i].src === u)) return;
+      }
+      videos.push({ src: u });
+    };
+    const addSku = (item) => {
+      const specValue = zzbSpecValue(item && item.name);
+      if (!specValue) return;
+      const pic = clean(item.url);
+      skus.push({
+        name: specValue,
+        specName: DEFAULT_SPEC_NAME,
+        specValue,
+        pic: pic,
+        price: num(item.price),
+        originalPrice: num(item.price),
+        stock: parseStock(item.quantity),
+      });
+    };
+    const list = lsJson("fileList_tb");
+    if (Array.isArray(list)) {
+      list.forEach((item) => {
+        if (!item) return;
+        const cate = Number(item.cateType);
+        const ft = Number(item.fileType);
+        if (ft === 2 || cate === 4 || isVideoURL(item.url)) {
+          addVid(item.url);
+          return;
+        }
+        let kind = "main";
+        if (cate === 3) kind = "detail";
+        else if (cate === 2) kind = "sku";
+        addImg(item.url, kind);
+        if (cate === 2) addSku(item);
+      });
+    }
+    const pack = lsJson("sku复制传值数据");
+    if (pack && pack.myItemInfo) {
+      const info = pack.myItemInfo;
+      if (info.pcVideo) addVid(info.pcVideo);
+      if (Array.isArray(info.item && info.item.videos)) {
+        info.item.videos.forEach((v) => addVid(v && v.url));
+      }
+    }
+    if (!skus.length && pack && Array.isArray(pack.skuInfos)) {
+      pack.skuInfos.forEach(addSku);
+    }
+    return { images, videos, skus, storedTitle: zzbStoredTitle() };
   }
 
   function looksLikeTitle(raw) {
@@ -80,9 +170,14 @@
   }
 
   function isTitleJunk(t) {
-    return /验证码|评价|销量|收藏|购物车|登录|资源一键下载|手机端主图|SKU工具|数据工具|全选 \(|详情页|网页无障碍|无障碍|好评率|满意度|回头率|88VIP|小时发货|平均\d|物流服务|描述相符|服务态度/.test(
-      t
-    ) || (t.match(/%/g) || []).length >= 2;
+    return (
+      /验证码|评价|销量|收藏|购物车|登录|资源一键下载|手机端主图|SKU工具|数据工具|全选 \(|详情页|网页无障碍|无障碍|好评率|满意度|回头率|88VIP|小时发货|平均\d|物流服务|描述相符|服务态度/.test(
+        t
+      ) ||
+      (t.match(/%/g) || []).length >= 2 ||
+      /^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(t) ||
+      /^\d{4}年\d{1,2}月/.test(t)
+    );
   }
 
   function cleanTitle(raw) {
@@ -233,9 +328,7 @@
         addVid(vid || pickSrc(el.querySelector("a[href]")));
         return;
       }
-      const img = el.querySelector("img");
-      const link = el.querySelector("a[href]");
-      const src = pickSrc(img) || pickSrc(link) || firstAlicdn(el.innerHTML || "");
+      const src = pickBestAlicdn(collectImageCands(el));
       if (!src) return;
       addImg(src, kindFromLine(line));
     };
@@ -316,13 +409,21 @@
   }
 
   function isProductImage(u) {
-    if (SKIP.test(u) || !/\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(u)) return false;
-    return /alicdn\.com|aliimg|imgextra|tbcdn|cloudvideo/i.test(u);
+    if (SKIP.test(u) || !/\.(jpe?g|png)(\?|$)/i.test(u)) return false;
+    return /alicdn\.com|aliimg|imgextra|tbcdn/i.test(u);
   }
 
   function firstAlicdn(html) {
-    const m = String(html || "").match(/https?:\/\/[^"'\\\s<>]+(?:alicdn|imgextra)[^"'\\\s<>]+/i);
-    return m ? m[0] : "";
+    return pickBestAlicdn(allAlicdn(html));
+  }
+
+  function allAlicdn(html) {
+    const out = [];
+    const re = /(?:https?:)?\/\/[^"'\\\s<>]+(?:alicdn|imgextra|aliimg|tbcdn)[^"'\\\s<>]*/gi;
+    let m;
+    const s = String(html || "");
+    while ((m = re.exec(s))) out.push(m[0]);
+    return out;
   }
 
   function extractSkus() {
@@ -537,25 +638,70 @@
   }
 
   function pickSrc(el) {
-    if (!el) return "";
-    return (
-      el.getAttribute("data-original") ||
-      el.getAttribute("data-src") ||
-      el.getAttribute("data-url") ||
-      el.currentSrc ||
-      el.getAttribute("src") ||
-      el.getAttribute("href") ||
-      ""
-    );
+    return pickBestAlicdn(collectImageCands(el));
   }
 
+  function collectImageCands(el) {
+    const out = [];
+    if (!el) return out;
+    const addEl = (n) => {
+      if (!n || !n.getAttribute) return;
+      out.push(
+        n.getAttribute("data-clipboard-text"),
+        n.getAttribute("data-original"),
+        n.getAttribute("data-src"),
+        n.getAttribute("data-url"),
+        n.getAttribute("data-lazy"),
+        n.getAttribute("href"),
+        n.getAttribute("src")
+      );
+    };
+    addEl(el);
+    if (el.querySelectorAll) {
+      const nodes = el.querySelectorAll("img, a[href], source, [data-src], [data-original]");
+      for (let i = 0; i < nodes.length; i++) addEl(nodes[i]);
+    }
+    allAlicdn(el.innerHTML || "").forEach((u) => out.push(u));
+    return out;
+  }
+
+  function pickBestAlicdn(list) {
+    const cleaned = [];
+    const seen = {};
+    (list || []).forEach((raw) => {
+      const u = clean(raw);
+      if (!u || seen[u] || !isProductImage(u)) return;
+      seen[u] = 1;
+      cleaned.push(u);
+    });
+    cleaned.sort((a, b) => imageScore(b) - imageScore(a));
+    return cleaned[0] || "";
+  }
+
+  function imageScore(u) {
+    let n = 0;
+    if (/\.jpe?g$/i.test(u)) n += 20;
+    else if (/\.png$/i.test(u)) n += 10;
+    if (/imgextra/i.test(u) && /!!/.test(u)) n += 5;
+    if (/_\d+x\d+/i.test(u)) n -= 8;
+    return n;
+  }
+
+  /** 与至尊宝 FillPicUrl + ClearImageUrl 一致，右键复制图片地址就是这套结果 */
   function clean(u) {
     if (!u) return "";
-    let s = String(u).trim();
-    if (s.indexOf("//") === 0) s = "https:" + s;
-    s = s.split(/[\s"'<>;)\\]/)[0];
+    let s = String(u).trim().split(/[\s"'<>;)\\]/)[0];
+    if (!s) return "";
+    if (s.indexOf("//") === 0) s = "http:" + s;
+    if (s.indexOf(".jpg_.webp") > 0) s = s.replace(".jpg_.webp", ".jpg");
+    if (s.indexOf("alicdn.com") > 0) {
+      s = s.replace(/_\d+x\d+\.jpg/, "");
+      s = s.replace(/_\d+x\d+\.png/, "");
+    }
+    if (s.indexOf(".png_") > 0) s = s.substr(0, s.indexOf(".png_") + 4);
+    if (s.indexOf(".jpg_") > 0) s = s.substr(0, s.indexOf(".jpg_") + 4);
     if (!/^https?:/i.test(s)) return "";
-    return s.replace(".jpg_.webp", ".jpg").replace(/_\d+x\d+\.(jpg|png|webp)/i, ".$1");
+    return s;
   }
 
   function num(v) {
@@ -767,6 +913,8 @@
     const price = priced.length ? Math.min.apply(null, priced.map((s) => s.price)) : 0;
     const original = skus.reduce((m, s) => Math.max(m, s.marketPrice || s.price || 0), 0);
     const stock = skus.reduce((m, s) => m + (s.stock || 0), 0);
+    const mains = unique(main.map(clean).filter(Boolean));
+    const details = unique(detail.map(clean).filter(Boolean));
     return {
       name: state.title || "未命名商品",
       subTitle: "",
@@ -775,10 +923,10 @@
       productSn: "",
       brandId: brandId,
       categoryId: categoryId,
-      pic: main[0] || "",
-      albumPics: unique(main),
+      pic: mains[0] || "",
+      albumPics: mains,
       media: {
-        detailPics: unique(detail),
+        detailPics: details,
       },
       price,
       originalPrice: original,
@@ -788,7 +936,7 @@
       isDraft: 1,
       verifyStatus: 1,
       description: state.title || "",
-      detailHtml: unique(detail)
+      detailHtml: details
         .map((u) => "<p><img src=\"" + u.replace(/"/g, "&quot;") + "\" /></p>")
         .join(""),
       skuSpecs: built.skuSpecs,

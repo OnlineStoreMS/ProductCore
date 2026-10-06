@@ -42,25 +42,40 @@ function emptyState() {
   };
 }
 
+function isJunkTitle(next) {
+  return (
+    !next ||
+    /^tb\d{4,}/i.test(next) ||
+    /^[a-z]{1,4}\d{5,}(_\d+)?$/i.test(next) ||
+    /^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(next) ||
+    /网页无障碍|好评率|满意度|88VIP|小时发货/.test(next) ||
+    (next.match(/%/g) || []).length >= 2
+  );
+}
+
 function mergeHarvest(tabId, incoming) {
   const cur = tabState.get(tabId) || emptyState();
   if (incoming.itemId && cur.itemId && incoming.itemId !== cur.itemId) {
     cur.title = "";
     cur.clickedTitle = false;
   }
-  if (incoming.title && incoming.clickedTitle) {
-    const next = String(incoming.title)
+  if (incoming.clickedTitle) cur.clickedTitle = true;
+  const applyTitle = (raw) => {
+    const next = String(raw || "")
       .replace(/[\uE000-\uF8FF]/g, "")
       .replace(/\s*已售(?:\s*\d+\+?\s*件?|完)?\s*/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-    const junk =
-      !next ||
-      /^tb\d{4,}/i.test(next) ||
-      /^[a-z]{1,4}\d{5,}(_\d+)?$/i.test(next) ||
-      /网页无障碍|好评率|满意度|88VIP|小时发货/.test(next) ||
-      (next.match(/%/g) || []).length >= 2;
-    if (!junk) cur.title = next;
+    if (isJunkTitle(next)) return;
+    if (!cur.title || isJunkTitle(cur.title) || incoming.clickedTitle) cur.title = next;
+  };
+  if (incoming.title && incoming.clickedTitle) applyTitle(incoming.title);
+  if (incoming.zzbTitle && cur.clickedTitle) {
+    const next = String(incoming.zzbTitle)
+      .replace(/[\uE000-\uF8FF]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!isJunkTitle(next) && next.length >= 8) cur.title = next;
   }
     if (incoming.itemId) cur.itemId = incoming.itemId;
     if (incoming.url && /item\.taobao|detail\.tmall/i.test(incoming.url)) cur.url = incoming.url;

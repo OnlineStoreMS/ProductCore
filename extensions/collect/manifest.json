@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ProductCore 商品采集",
-  "version": "0.1.20",
+  "version": "0.1.25",
   "description": "人工点至尊宝「悬浮标题采集」「手机端主图视频SKU」「SKU工具」后，自动抓取汇总，再上传到商品管理系统。",
   "permissions": ["storage", "cookies", "tabs", "scripting"],
   "host_permissions": ["<all_urls>"],

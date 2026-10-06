@@ -8,6 +8,7 @@ import (
 	"productcore/internal/dto"
 	"productcore/internal/integrations/agentscenter"
 	"productcore/internal/model"
+	"productcore/internal/pkg/taobaoimg"
 	"productcore/internal/repo"
 )
 
@@ -30,6 +31,7 @@ func (s *ProductCollectService) IngestFromExtension(tenantID, userID uint64, pro
 	if name == "" || strings.Contains(name, "评价") {
 		return nil, ErrCollectEmpty
 	}
+	taobaoimg.UnwrapProduct(product)
 	if strings.TrimSpace(product.Pic) == "" && len(product.AlbumPics) == 0 && len(product.Skus) == 0 {
 		return nil, ErrCollectEmpty
 	}
@@ -170,6 +172,7 @@ func (s *ProductCollectService) ingestIfNeeded(tenantID uint64, task *model.Prod
 		s.patchCollectJSON(task, payload, 0, err.Error())
 		return
 	}
+	taobaoimg.UnwrapProduct(&in)
 	in.IsDraft = 1
 	in.PublishStatus = 0
 	if strings.TrimSpace(in.Unit) == "" {
