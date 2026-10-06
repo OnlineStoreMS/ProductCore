@@ -275,6 +275,8 @@
       '<div><b id="pc-detail">0</b>详情</div>' +
       '<div><b id="pc-sku">0</b>SKU</div>' +
       "</div>" +
+      '<label class="field">品牌<select id="pc-brand"><option value="">加载中…</option></select></label>' +
+      '<label class="field">分类<select id="pc-category"><option value="">加载中…</option></select></label>' +
       '<div class="actions">' +
       '<button class="upload" id="pc-upload" disabled>上传到商品系统</button>' +
       '<button class="reset" id="pc-reset" type="button">清空</button>' +
@@ -291,6 +293,62 @@
     chrome.runtime.sendMessage({ type: "pc-collect-get" }, (state) => {
       if (state) render(state);
     });
+    loadChoices();
+  }
+
+  function loadChoices() {
+    chrome.runtime.sendMessage({ type: "pc-collect-meta" }, (res) => {
+      const brandEl = document.getElementById("pc-brand");
+      const categoryEl = document.getElementById("pc-category");
+      if (!brandEl || !categoryEl) return;
+      if (!res || !res.ok) {
+        const text = (res && res.error) || "品牌和分类加载失败";
+        brandEl.innerHTML = '<option value="">' + text + "</option>";
+        categoryEl.innerHTML = '<option value="">' + text + "</option>";
+        return;
+      }
+      const categories = [];
+      flattenCategories(res.categories || [], "", categories);
+      chrome.storage.local.get(["brandId", "categoryId"], (saved) => {
+        fillSelect(brandEl, res.brands || [], saved && saved.brandId, "无品牌");
+        fillSelect(categoryEl, categories, saved && saved.categoryId, "无分类");
+      });
+    });
+  }
+
+  function flattenCategories(list, prefix, out) {
+    (list || []).forEach((item) => {
+      if (!item || !item.id) return;
+      const name = prefix + (item.name || "");
+      out.push({ id: item.id, name: name });
+      if (item.children && item.children.length) flattenCategories(item.children, name + " / ", out);
+    });
+  }
+
+  function fillSelect(el, items, savedId, preferName) {
+    el.innerHTML = "";
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = items.length ? "请选择" : "没有可选数据";
+    el.appendChild(blank);
+    items.forEach((item) => {
+      const opt = document.createElement("option");
+      opt.value = String(item.id);
+      opt.textContent = item.name || String(item.id);
+      el.appendChild(opt);
+    });
+    const saved = Number(savedId) || 0;
+    const named = items.find((item) => item.name === preferName || String(item.name || "").endsWith(" / " + preferName));
+    const pick = saved && items.some((item) => Number(item.id) === saved) ? saved : named ? Number(named.id) : 0;
+    el.value = pick ? String(pick) : "";
+    el.onchange = () => {
+      const key = el.id === "pc-brand" ? "brandId" : "categoryId";
+      chrome.storage.local.set({ [key]: Number(el.value) || 0 });
+    };
+    if (pick) {
+      const key = el.id === "pc-brand" ? "brandId" : "categoryId";
+      chrome.storage.local.set({ [key]: pick });
+    }
   }
 
   function counts(state) {
@@ -311,7 +369,7 @@
     let hint = "请把鼠标放到商品标题上踩一下，再点至尊宝「手机端主图视频SKU」。";
     if (state.title) hint = "标题已抓到。请点至尊宝「手机端主图视频SKU」。";
     if (c.main > 0) hint = "主图已抓到。请再点「SKU工具」抓规格表。";
-    if (c.main > 0 && c.sku > 0) hint = "可以上传了。品牌/分类入库后为 0，在商品系统里补。";
+    if (c.main > 0 && c.sku > 0) hint = "可以上传了。先选品牌和分类，再点上传。";
     if (state.clickedMedia && c.main === 0) hint = "已点主图工具，正在等弹层加载…";
     if (state.clickedSku && c.sku === 0) hint = "已点 SKU 工具，正在等规格表加载…";
     panel.querySelector("#pc-hint").textContent = hint;
@@ -323,9 +381,18 @@
   function doUpload() {
     const panel = document.getElementById("pc-collect-panel");
     const err = panel.querySelector("#pc-err");
+    const brandId = Number((panel.querySelector("#pc-brand") || {}).value) || 0;
+    const categoryId = Number((panel.querySelector("#pc-category") || {}).value) || 0;
+    if (!brandId || !categoryId) {
+      err.className = "err";
+      err.textContent = "请先选择品牌和分类。";
+      return;
+    }
+    err.className = "err";
     err.textContent = "上传中…";
     const state = JSON.parse(panel.dataset.state || "{}");
-    const product = toProduct(state);
+    const product = toProduct(state, brandId, categoryId);
+    chrome.storage.local.set({ brandId: brandId, categoryId: categoryId });
     chrome.runtime.sendMessage(
       {
         type: "pc-collect-upload",
@@ -347,7 +414,7 @@
     );
   }
 
-  function toProduct(state) {
+  function toProduct(state, brandId, categoryId) {
     const itemId = state.itemId || ((state.url || "").match(/[?&]id=(\d+)/) || [])[1] || "";
     const images = state.images || [];
     const main = [];
@@ -386,8 +453,8 @@
       materialCode: itemId ? "TB" + itemId : "",
       source: state.platform || "taobao",
       productSn: itemId,
-      brandId: 0,
-      categoryId: 0,
+      brandId: brandId,
+      categoryId: categoryId,
       pic: main[0] || "",
       albumPics: unique(main),
       productVideo: video,

@@ -18,6 +18,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((err) => sendResponse({ ok: false, error: String(err && err.message ? err.message : err) }));
     return true;
   }
+  if (msg && msg.type === "pc-collect-meta") {
+    loadMeta()
+      .then((result) => sendResponse(result))
+      .catch((err) => sendResponse({ ok: false, error: String(err && err.message ? err.message : err) }));
+    return true;
+  }
   return false;
 });
 
@@ -92,18 +98,44 @@ function pushToTab(tabId) {
   });
 }
 
+async function loadMeta() {
+  const auth = await authContext();
+  const headers = {};
+  if (auth.token) headers.Authorization = "Bearer " + auth.token;
+  const [brandsRes, categoryRes] = await Promise.all([
+    fetch(auth.apiBase + "/api/v1/admin/brands", { credentials: "include", headers }),
+    fetch(auth.apiBase + "/api/v1/admin/categories/tree", { credentials: "include", headers }),
+  ]);
+  const brandsBody = await readJson(brandsRes);
+  const categoryBody = await readJson(categoryRes);
+  if (!brandsBody.ok) return brandsBody;
+  if (!categoryBody.ok) return categoryBody;
+  return { ok: true, brands: brandsBody.data || [], categories: categoryBody.data || [] };
+}
+
 async function upload(payload) {
-  const cfg = await chrome.storage.local.get(["apiBase", "token"]);
-  const apiBase = normalizeApiBase(cfg.apiBase);
-  const token = String(cfg.token || "").trim() || (await readAccessCookie(apiBase));
+  const auth = await authContext();
   const headers = { "Content-Type": "application/json" };
-  if (token) headers.Authorization = "Bearer " + token;
-  const res = await fetch(apiBase + "/api/v1/admin/product-collects/ingest", {
+  if (auth.token) headers.Authorization = "Bearer " + auth.token;
+  const res = await fetch(auth.apiBase + "/api/v1/admin/product-collects/ingest", {
     method: "POST",
     credentials: "include",
     headers,
     body: JSON.stringify(payload),
   });
+  const body = await readJson(res);
+  if (!body.ok) return body;
+  return { ok: true, task: body.data };
+}
+
+async function authContext() {
+  const cfg = await chrome.storage.local.get(["apiBase", "token"]);
+  const apiBase = normalizeApiBase(cfg.apiBase);
+  const token = String(cfg.token || "").trim() || (await readAccessCookie(apiBase));
+  return { apiBase, token };
+}
+
+async function readJson(res) {
   const text = await res.text();
   let data = {};
   try {
@@ -115,10 +147,10 @@ async function upload(payload) {
     const hint =
       res.status === 401
         ? "未登录。请在本 Chrome 打开商品系统登录一次，Token 可留空。"
-        : data.message || "上传失败 HTTP " + res.status;
+        : data.message || "请求失败 HTTP " + res.status;
     return { ok: false, error: hint };
   }
-  return { ok: true, task: data.data };
+  return { ok: true, data: data.data };
 }
 
 function readAccessCookie(apiBase) {

@@ -27,15 +27,6 @@ func (r *BrandRepo) GetByID(tenantID, id uint64) (*model.Brand, error) {
 	return &b, nil
 }
 
-func (r *BrandRepo) GetByName(tenantID uint64, name string) (*model.Brand, error) {
-	var b model.Brand
-	err := r.db.Scopes(scopeTenant(tenantID)).Where("name = ?", name).Order("id ASC").First(&b).Error
-	if err != nil {
-		return nil, err
-	}
-	return &b, nil
-}
-
 func (r *BrandRepo) Create(b *model.Brand) error { return r.db.Create(b).Error }
 
 func (r *BrandRepo) Save(b *model.Brand) error { return r.db.Save(b).Error }
@@ -70,15 +61,6 @@ func (r *CategoryRepo) ListAll(tenantID uint64) ([]model.Category, error) {
 func (r *CategoryRepo) GetByID(tenantID, id uint64) (*model.Category, error) {
 	var c model.Category
 	if err := r.db.Scopes(scopeTenant(tenantID)).First(&c, id).Error; err != nil {
-		return nil, err
-	}
-	return &c, nil
-}
-
-func (r *CategoryRepo) GetByName(tenantID uint64, name string) (*model.Category, error) {
-	var c model.Category
-	err := r.db.Scopes(scopeTenant(tenantID)).Where("name = ?", name).Order("id ASC").First(&c).Error
-	if err != nil {
 		return nil, err
 	}
 	return &c, nil

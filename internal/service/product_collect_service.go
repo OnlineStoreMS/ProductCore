@@ -2,8 +2,6 @@ package service
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -11,8 +9,6 @@ import (
 	"productcore/internal/integrations/agentscenter"
 	"productcore/internal/model"
 	"productcore/internal/repo"
-
-	"gorm.io/gorm"
 )
 
 type ProductCollectService struct {
@@ -93,10 +89,6 @@ func (s *ProductCollectService) IngestFromExtension(tenantID, userID uint64, pro
 		normalized = "https://item.taobao.com/item.htm?id=" + sn
 	}
 
-	product.BrandID = 0
-	product.BrandName = "无品牌"
-	product.CategoryID = 0
-	product.CategoryName = "无分类"
 	product.IsDraft = 1
 	product.PublishStatus = 0
 	if strings.TrimSpace(product.Source) == "" {
@@ -234,10 +226,6 @@ func (s *ProductCollectService) ingestIfNeeded(tenantID uint64, task *model.Prod
 		s.patchCollectJSON(task, payload, 0, err.Error())
 		return
 	}
-	if err := s.applyDefaultBrandCategory(tenantID, &in); err != nil {
-		s.patchCollectJSON(task, payload, 0, err.Error())
-		return
-	}
 	in.IsDraft = 1
 	in.PublishStatus = 0
 	if strings.TrimSpace(in.Unit) == "" {
@@ -276,28 +264,6 @@ func (s *ProductCollectService) patchCollectJSON(task *model.ProductCollectTask,
 	}
 	task.ResultJSON = string(out)
 	_ = s.repos.ProductCollect.Save(task)
-}
-
-func (s *ProductCollectService) applyDefaultBrandCategory(tenantID uint64, in *dto.ProductDTO) error {
-	brand, err := s.repos.Brand.GetByName(tenantID, "无品牌")
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("未找到品牌「无品牌」")
-		}
-		return err
-	}
-	category, err := s.repos.Category.GetByName(tenantID, "无分类")
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return fmt.Errorf("未找到分类「无分类」")
-		}
-		return err
-	}
-	in.BrandID = brand.ID
-	in.BrandName = brand.Name
-	in.CategoryID = category.ID
-	in.CategoryName = category.Name
-	return nil
 }
 
 func newestAgent(list []agentscenter.Agent) *agentscenter.Agent {
