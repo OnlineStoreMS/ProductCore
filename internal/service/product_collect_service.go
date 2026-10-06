@@ -47,8 +47,6 @@ func (s *ProductCollectService) IngestFromExtension(tenantID, userID uint64, pro
 		normalized = "https://item.taobao.com/item.htm?id=" + sn
 	}
 
-	product.BrandID = 0
-	product.CategoryID = 0
 	product.IsDraft = 1
 	product.PublishStatus = 0
 	if strings.TrimSpace(product.Source) == "" {
@@ -168,8 +166,6 @@ func (s *ProductCollectService) ingestIfNeeded(tenantID uint64, task *model.Prod
 		s.patchCollectJSON(task, payload, 0, err.Error())
 		return
 	}
-	in.BrandID = 0
-	in.CategoryID = 0
 	in.IsDraft = 1
 	in.PublishStatus = 0
 	if strings.TrimSpace(in.Unit) == "" {

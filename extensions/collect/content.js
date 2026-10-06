@@ -180,44 +180,104 @@
     const looks = /规格名称|销售价|市场价|商家编码|规格信息/.test(text) && !/资源一键下载|全选 \(/.test(text);
     if (!looks && !/sku/i.test(href)) return [];
     const rows = [];
-    const push = (name, pic, price, original, stock, skuId) => {
+    const seen = {};
+    const push = (name, pic, price, original, stock) => {
       name = String(name || "").replace(/\s+/g, " ").trim();
-      if (!name && !pic) return;
-      if (/规格名称|销售价|市场价|库存|商家编码|查询中|加载中/.test(name) && !pic) return;
-      rows.push({
+      if (!name) return;
+      if (/规格名称|销售价|市场价|库存|商家编码|查询中|加载中|sku名称/.test(name)) return;
+      const key = name + "\0" + String(pic || "");
+      const row = {
         name,
         pic: clean(pic),
         price: num(price),
         originalPrice: num(original),
         stock: Math.round(num(stock)),
-        skuId: String(skuId || "").trim(),
-      });
+      };
+      if (seen[key] && !(row.price > 0 && !(seen[key].price > 0))) return;
+      seen[key] = row;
+      rows.push(row);
     };
     document.querySelectorAll("table").forEach((table) => {
-      table.querySelectorAll("tr").forEach((tr) => {
-        const tds = Array.from(tr.querySelectorAll("td"));
-        if (tds.length < 2) return;
+      const headers = tableHeaders(table);
+      const nameCol = colIndex(headers, ["规格名称", "sku名称", "SKU名称", "规格信息"]);
+      const priceCol = colIndex(headers, ["销售价", "原价", "价格"]);
+      const marketCol = colIndex(headers, ["市场价"]);
+      const stockCol = colIndex(headers, ["库存"]);
+      if (nameCol < 0 && priceCol < 0) return;
+      tableBodyRows(table).forEach((tr) => {
+        const cells = Array.from(tr.querySelectorAll("td"));
+        if (!cells.length) return;
         const img = tr.querySelector("img");
-        const texts = tds.map((td) => (td.innerText || "").trim()).filter(Boolean);
-        if (!texts.length) return;
-        const head = texts.join(" ");
-        if (/规格|价格|库存|SKU|商家编码/.test(head) && texts.length <= 6 && !img && !/\d+\.\d{2}/.test(head)) return;
-        const price = texts.find((x) => /¥|￥|\d+\.\d{2}/.test(x));
-        const stock = texts.find((x) => /库存|件/.test(x)) || texts.find((x, i) => i > 0 && /^\d+$/.test(x));
-        const name = texts.find((x) => !/¥|￥|库存|件/.test(x) && !/^\d+(\.\d+)?$/.test(x)) || texts[0];
-        push(name, img ? img.src : "", price, "", stock, "");
+        const name = cellValue(cells[nameCol >= 0 ? nameCol : 0]);
+        const price = moneyIn(priceCol >= 0 ? cells[priceCol] : null);
+        const market = moneyIn(marketCol >= 0 ? cells[marketCol] : null);
+        const stock = stockCol >= 0 ? cellValue(cells[stockCol]) : "";
+        push(name, img ? pickSrc(img) : "", price, market, stock);
       });
     });
-    if (!rows.length) {
-      document.querySelectorAll(".el-table__row, .tbb_sku_item").forEach((el) => {
-        const img = el.querySelector("img");
-        const line = (el.innerText || "").replace(/\s+/g, " ").trim();
-        if (!line) return;
-        const parts = line.split(" ").filter(Boolean);
-        push(parts[0], img ? img.src : "", parts.find((x) => /¥|￥|\d+\.\d{2}/.test(x)), "", parts.find((x) => /库存|件/.test(x)), "");
-      });
+    return dedupeSkuRows(rows);
+  }
+
+  function tableHeaders(table) {
+    const wrap = table.closest(".el-table");
+    let row = wrap && wrap.querySelector(".el-table__header thead tr");
+    if (!row) row = table.querySelector("thead tr");
+    if (!row) {
+      const first = table.querySelector("tr");
+      if (first && /规格名称|销售价|市场价|sku名称|规格信息/.test(first.innerText || "")) row = first;
     }
-    return rows;
+    if (!row) return [];
+    return Array.from(row.querySelectorAll("th, td")).map(cellValue);
+  }
+
+  function tableBodyRows(table) {
+    const body = table.querySelectorAll("tbody tr");
+    const rows = body.length ? Array.from(body) : Array.from(table.querySelectorAll("tr"));
+    return rows.filter((tr) => tr.querySelector("td") && !tr.querySelector("th"));
+  }
+
+  function colIndex(headers, keys) {
+    for (let k = 0; k < keys.length; k++) {
+      const key = keys[k];
+      for (let i = 0; i < headers.length; i++) {
+        const h = String(headers[i] || "").replace(/\s+/g, "");
+        if (!h) continue;
+        if (key === "价格" && h.indexOf("市场") >= 0) continue;
+        if (h === key || h.indexOf(key) >= 0) return i;
+      }
+    }
+    return -1;
+  }
+
+  function cellValue(cell) {
+    if (!cell) return "";
+    const inputs = Array.from(cell.querySelectorAll("input, textarea"));
+    const values = inputs.map((el) => String(el.value || "").trim()).filter(Boolean);
+    const text = String(cell.innerText || "").replace(/\s+/g, " ").trim();
+    if (!values.length) return text;
+    const numeric = values.find((v) => /\d/.test(v));
+    if (numeric && (!text || text.indexOf(numeric) < 0)) return numeric;
+    return text || values[0];
+  }
+
+  function moneyIn(cell) {
+    if (!cell) return 0;
+    const inputs = Array.from(cell.querySelectorAll("input, textarea"));
+    for (let i = 0; i < inputs.length; i++) {
+      const n = num(inputs[i].value);
+      if (n > 0) return n;
+    }
+    return num(cellValue(cell));
+  }
+
+  function dedupeSkuRows(rows) {
+    const map = new Map();
+    rows.forEach((row) => {
+      const key = row.name;
+      const prev = map.get(key);
+      if (!prev || (row.price > 0 && !(prev.price > 0))) map.set(key, row);
+    });
+    return Array.from(map.values());
   }
 
   function pickSrc(el) {
@@ -427,21 +487,8 @@
       else main.push(img.src);
     });
     if (!main.length && skuPics.length) main.push(skuPics[0]);
-    const skus = (state.skus || []).map((row, i) => {
-      const name = row.name || "规格" + (i + 1);
-      const pic = row.pic || skuPics[i] || "";
-      const skuId = String(row.skuId || "").replace(/[^A-Za-z0-9]/g, "");
-      const code = skuId ? "TB" + skuId : itemId ? "TB" + itemId + "S" + String(i + 1).padStart(2, "0") : "SKU" + String(i + 1).padStart(2, "0");
-      return {
-        skuCode: code.slice(0, 64),
-        specs: { 规格: name },
-        price: row.price || 0,
-        marketPrice: row.originalPrice || row.price || 0,
-        stock: row.stock || 0,
-        pic,
-      };
-    });
-    const specValues = skus.map((s) => ({ value: s.specs["规格"], pic: s.pic || "" }));
+    const built = buildImportedSkus(state.skus || [], skuPics);
+    const skus = built.skus;
     const video = (state.videos || [])[0] || "";
     const priced = skus.filter((s) => s.price > 0);
     const price = priced.length ? Math.min.apply(null, priced.map((s) => s.price)) : 0;
@@ -450,8 +497,8 @@
     return {
       name: state.title || "未命名商品",
       subTitle: "",
-      materialCode: itemId ? "TB" + itemId : "",
-      source: state.platform || "taobao",
+      materialCode: "",
+      source: "淘宝",
       productSn: itemId,
       brandId: brandId,
       categoryId: categoryId,
@@ -473,9 +520,81 @@
       detailHtml: unique(detail)
         .map((u) => "<p><img src=\"" + u.replace(/"/g, "&quot;") + "\" /></p>")
         .join(""),
-      skuSpecs: specValues.length ? [{ name: "规格", values: specValues }] : [],
+      skuSpecs: built.skuSpecs,
       skus,
       channelVisible: "both",
+    };
+  }
+
+  function parseSkuName(skuName) {
+    const text = String(skuName || "").replace(/\s+/g, " ").trim();
+    const idxAscii = text.indexOf(":");
+    const idxFull = text.indexOf("：");
+    let splitAt = -1;
+    if (idxAscii >= 0 && idxFull >= 0) splitAt = Math.min(idxAscii, idxFull);
+    else if (idxAscii >= 0) splitAt = idxAscii;
+    else if (idxFull >= 0) splitAt = idxFull;
+    if (splitAt <= 0) return { specName: "商品规格", specValue: text };
+    const specName = text.slice(0, splitAt).trim() || "商品规格";
+    const specValue = text.slice(splitAt + 1).trim();
+    return { specName, specValue: specValue || text };
+  }
+
+  function nextSkuCode(used) {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    for (let attempt = 0; attempt < 10000; attempt++) {
+      let code = "";
+      for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
+      if (!used[code]) {
+        used[code] = 1;
+        return code;
+      }
+    }
+    return "SKU" + String(Object.keys(used).length + 1);
+  }
+
+  function buildImportedSkus(rows, skuPics) {
+    const used = {};
+    const byKey = new Map();
+    rows.forEach((row, i) => {
+      const parsed = parseSkuName(row.name || "");
+      if (!parsed.specValue) return;
+      const pic = row.pic || skuPics[i] || "";
+      const item = {
+        specName: parsed.specName,
+        specValue: parsed.specValue,
+        pic,
+        price: row.price || 0,
+        marketPrice: row.originalPrice || row.price || 0,
+        stock: row.stock || 0,
+      };
+      const key = item.specName + "\0" + item.specValue;
+      const prev = byKey.get(key);
+      if (!prev || (item.price > 0 && !(prev.price > 0))) byKey.set(key, item);
+    });
+    const items = Array.from(byKey.values());
+    const specOrder = [];
+    const specValues = {};
+    items.forEach((item) => {
+      if (!specValues[item.specName]) {
+        specValues[item.specName] = [];
+        specOrder.push(item.specName);
+      }
+      const bucket = specValues[item.specName];
+      const found = bucket.find((v) => v.value === item.specValue);
+      if (!found) bucket.push({ value: item.specValue, pic: item.pic || "" });
+      else if (!found.pic && item.pic) found.pic = item.pic;
+    });
+    return {
+      skus: items.map((item) => ({
+        skuCode: nextSkuCode(used),
+        specs: { [item.specName]: item.specValue },
+        price: item.price,
+        marketPrice: item.marketPrice,
+        stock: item.stock,
+        pic: item.pic,
+      })),
+      skuSpecs: specOrder.map((name) => ({ name, values: specValues[name] })),
     };
   }
 
