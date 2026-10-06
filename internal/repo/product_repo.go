@@ -10,7 +10,7 @@ import (
 )
 
 type ProductRepo struct {
-	db *gorm.DB
+	db       *gorm.DB
 	tenantID uint64
 }
 
@@ -179,7 +179,18 @@ func (r *ProductRepo) CountBySN(sn string, excludeID uint64) (int64, error) {
 
 func (r *ProductRepo) Create(p *model.Product) error {
 	p.TenantID = r.TenantID()
-	return r.db.Create(p).Error
+	// 未选品牌/分类时写 NULL。写成 0 会触发 fk_products_brand / fk_products_category。
+	omit := make([]string, 0, 2)
+	if p.BrandID == 0 {
+		omit = append(omit, "BrandID")
+	}
+	if p.CategoryID == 0 {
+		omit = append(omit, "CategoryID")
+	}
+	if len(omit) == 0 {
+		return r.db.Create(p).Error
+	}
+	return r.db.Omit(omit...).Create(p).Error
 }
 
 // CreateDraft 创建草稿商品，brand_id/category_id 留空（NULL）
