@@ -1,9 +1,5 @@
 package dto
 
-type CreateProductCollectRequest struct {
-	ProductURL string `json:"productUrl" binding:"required"`
-}
-
 // IngestProductCollectRequest 浏览器扩展人工点至尊宝后回传的商品草稿。
 type IngestProductCollectRequest struct {
 	ProductURL string      `json:"productUrl"`

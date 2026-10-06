@@ -21,33 +21,6 @@ func NewProductCollectHandler(svc *service.ProductCollectService) *ProductCollec
 	return &ProductCollectHandler{svc: svc}
 }
 
-// Create godoc
-//
-//	@Summary		采集电商商品
-//	@Description	提交淘宝/天猫商品链接，创建任务并下发到在线的 WindowsAgent
-//	@Tags			admin-采集
-//	@Accept			json
-//	@Produce		json
-//	@Security		BearerAuth
-//	@Param			body	body		dto.CreateProductCollectRequest	true	"商品链接"
-//	@Success		200		{object}	response.ProductCollectTaskResp
-//	@Failure		400		{object}	response.Body
-//	@Failure		500		{object}	response.Body
-//	@Router			/admin/product-collects [post]
-func (h *ProductCollectHandler) Create(c *gin.Context) {
-	var in dto.CreateProductCollectRequest
-	if err := c.ShouldBindJSON(&in); err != nil {
-		response.Fail(c, http.StatusBadRequest, "请输入商品链接")
-		return
-	}
-	task, err := h.svc.Create(authcontext.TenantID(c), authcontext.UserID(c), in.ProductURL)
-	if err != nil {
-		httputil.HandleServiceError(c, err)
-		return
-	}
-	response.OK(c, task)
-}
-
 // Ingest godoc
 //
 //	@Summary		扩展回传入库
@@ -78,7 +51,7 @@ func (h *ProductCollectHandler) Ingest(c *gin.Context) {
 // List godoc
 //
 //	@Summary		采集任务列表
-//	@Description	查看本租户的商品采集任务，并同步 WindowsAgent 执行状态
+//	@Description	查看本租户的商品采集任务
 //	@Tags			admin-采集
 //	@Produce		json
 //	@Security		BearerAuth

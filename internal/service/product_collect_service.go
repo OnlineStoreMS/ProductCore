@@ -21,48 +21,6 @@ func NewProductCollectService(repos *repo.Repos, agents *agentscenter.Client, pr
 	return &ProductCollectService{repos: repos, agents: agents, products: products}
 }
 
-func (s *ProductCollectService) Create(tenantID, userID uint64, productURL string) (*dto.ProductCollectTaskDTO, error) {
-	if s.agents == nil {
-		return nil, ErrAgentsCenterUnconfigured
-	}
-	tenantID = repo.NormalizeTenantID(tenantID)
-	platform, normalized, err := DetectCollectPlatform(productURL)
-	if err != nil {
-		return nil, err
-	}
-
-	agent, err := s.pickAgent(tenantID)
-	if err != nil {
-		return nil, err
-	}
-
-	params, _ := json.Marshal(map[string]string{
-		"productUrl": normalized,
-		"platform":   platform,
-		"source":     "productcore",
-	})
-	job, err := s.agents.CreateProductCollectJob(tenantID, agent.ID, platform, string(params))
-	if err != nil {
-		return nil, err
-	}
-
-	task := &model.ProductCollectTask{
-		TenantID:   tenantID,
-		UserID:     userID,
-		ProductURL: normalized,
-		Platform:   platform,
-		AgentJobID: job.ID,
-		AgentID:    agent.ID,
-		AgentName:  agent.Name,
-		Status:     "pending",
-	}
-	if err := s.repos.ProductCollect.Create(task); err != nil {
-		return nil, err
-	}
-	dtoTask := toCollectDTO(*task)
-	return &dtoTask, nil
-}
-
 func (s *ProductCollectService) IngestFromExtension(tenantID, userID uint64, productURL string, product *dto.ProductDTO) (*dto.ProductCollectTaskDTO, error) {
 	tenantID = repo.NormalizeTenantID(tenantID)
 	if product == nil {
@@ -89,6 +47,8 @@ func (s *ProductCollectService) IngestFromExtension(tenantID, userID uint64, pro
 		normalized = "https://item.taobao.com/item.htm?id=" + sn
 	}
 
+	product.BrandID = 0
+	product.CategoryID = 0
 	product.IsDraft = 1
 	product.PublishStatus = 0
 	if strings.TrimSpace(product.Source) == "" {
@@ -150,24 +110,6 @@ func (s *ProductCollectService) List(tenantID uint64, page, pageSize int) ([]dto
 	return out, total, nil
 }
 
-func (s *ProductCollectService) pickAgent(tenantID uint64) (*agentscenter.Agent, error) {
-	capable, err := s.agents.ListAgents(tenantID, true, agentscenter.JobTypeEcommerceProductCollect)
-	if err != nil {
-		return nil, err
-	}
-	if agent := newestAgent(capable); agent != nil {
-		return agent, nil
-	}
-	anyOnline, err := s.agents.ListAgents(tenantID, true, "")
-	if err != nil {
-		return nil, err
-	}
-	if len(anyOnline) > 0 {
-		return nil, ErrCollectAgentOutdated
-	}
-	return nil, ErrNoCollectAgent
-}
-
 func (s *ProductCollectService) syncJobs(tenantID uint64, list []model.ProductCollectTask) {
 	if s.agents == nil || len(list) == 0 {
 		return
@@ -226,6 +168,8 @@ func (s *ProductCollectService) ingestIfNeeded(tenantID uint64, task *model.Prod
 		s.patchCollectJSON(task, payload, 0, err.Error())
 		return
 	}
+	in.BrandID = 0
+	in.CategoryID = 0
 	in.IsDraft = 1
 	in.PublishStatus = 0
 	if strings.TrimSpace(in.Unit) == "" {
@@ -264,24 +208,6 @@ func (s *ProductCollectService) patchCollectJSON(task *model.ProductCollectTask,
 	}
 	task.ResultJSON = string(out)
 	_ = s.repos.ProductCollect.Save(task)
-}
-
-func newestAgent(list []agentscenter.Agent) *agentscenter.Agent {
-	var best *agentscenter.Agent
-	var bestAt time.Time
-	for i := range list {
-		at := time.Time{}
-		if list[i].LastHeartbeat != nil {
-			if parsed, err := time.Parse(time.RFC3339, *list[i].LastHeartbeat); err == nil {
-				at = parsed
-			}
-		}
-		if best == nil || at.After(bestAt) {
-			best = &list[i]
-			bestAt = at
-		}
-	}
-	return best
 }
 
 func collectTerminal(status string) bool {

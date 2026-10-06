@@ -8,14 +8,10 @@ export interface ProductCollectTask {
   agentJobId: number
   agentId: number
   agentName: string
+  productId?: number
   status: string
   message: string
   createdAt: string
-}
-
-export async function createProductCollect(productUrl: string) {
-  const res = await client.post('/product-collects', { productUrl })
-  return unwrap<ProductCollectTask>(res)
 }
 
 export async function fetchProductCollects(page = 1, pageSize = 20) {

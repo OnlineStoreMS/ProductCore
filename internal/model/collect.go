@@ -1,6 +1,6 @@
 package model
 
-// ProductCollectTask 电商商品采集任务。可由 WindowsAgent 或浏览器扩展回写。
+// ProductCollectTask 电商商品采集任务（浏览器扩展回写）。
 type ProductCollectTask struct {
 	BaseModel
 	TenantID     uint64 `gorm:"index;not null;default:1" json:"tenantId"`

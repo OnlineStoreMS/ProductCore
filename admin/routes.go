@@ -83,6 +83,5 @@ func RegisterRoutes(
 	g.DELETE("/platform-shops/:id", platformShopH.Delete)
 
 	g.GET("/product-collects", collectH.List)
-	g.POST("/product-collects", collectH.Create)
 	g.POST("/product-collects/ingest", collectH.Ingest)
 }

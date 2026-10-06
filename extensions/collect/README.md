@@ -31,4 +31,4 @@
 
 `POST https://osms.zfcycle.com/apps/product/api/v1/admin/product-collects/ingest`
 
-Body 与 WindowsAgent 回写同一套 `ProductDTO`。
+Body 为商品系统的 `ProductDTO`。
