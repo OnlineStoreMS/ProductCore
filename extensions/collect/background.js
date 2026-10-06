@@ -54,10 +54,12 @@ function isJunkTitle(next) {
 }
 
 function mergeHarvest(tabId, incoming) {
-  const cur = tabState.get(tabId) || emptyState();
+  let cur = tabState.get(tabId) || emptyState();
+  if (incoming.resetSession) {
+    cur = emptyState();
+  }
   if (incoming.itemId && cur.itemId && incoming.itemId !== cur.itemId) {
-    cur.title = "";
-    cur.clickedTitle = false;
+    cur = emptyState();
   }
   if (incoming.clickedTitle) cur.clickedTitle = true;
   const applyTitle = (raw) => {
@@ -77,25 +79,25 @@ function mergeHarvest(tabId, incoming) {
       .trim();
     if (!isJunkTitle(next) && next.length >= 8) cur.title = next;
   }
-    if (incoming.itemId) cur.itemId = incoming.itemId;
-    if (incoming.url && /item\.taobao|detail\.tmall/i.test(incoming.url)) cur.url = incoming.url;
-    if (incoming.platform && incoming.url && /item\.taobao|detail\.tmall/i.test(incoming.url)) {
-      cur.platform = incoming.platform;
+  if (incoming.itemId) cur.itemId = incoming.itemId;
+  if (incoming.url && /item\.taobao|detail\.tmall/i.test(incoming.url)) cur.url = incoming.url;
+  if (incoming.platform && incoming.url && /item\.taobao|detail\.tmall/i.test(incoming.url)) {
+    cur.platform = incoming.platform;
+  }
+    if (incoming.clickedMedia) cur.clickedMedia = true;
+    if (incoming.clickedSku) cur.clickedSku = true;
+    if (incoming.clickedTitle) cur.clickedTitle = true;
+    const storeItem = incoming.zzbItemId ? String(incoming.zzbItemId) : "";
+    const sameItem = !storeItem || !cur.itemId || storeItem === String(cur.itemId);
+    // 主图/视频/SKU 只在点过对应按钮、且缓存属于当前商品后才收。
+    // 视频必须整表覆盖（包括空数组），否则没视频的商品会沿用上一件的 mp4。
+    if (sameItem && cur.clickedMedia && incoming.fromZzbStore) {
+      if (Array.isArray(incoming.images) && incoming.images.length) cur.images = incoming.images;
+      if (Array.isArray(incoming.videos)) cur.videos = incoming.videos;
     }
-  if (incoming.clickedMedia) cur.clickedMedia = true;
-  if (incoming.clickedSku) cur.clickedSku = true;
-  if (incoming.clickedTitle) cur.clickedTitle = true;
-  if (Array.isArray(incoming.images) && incoming.images.length) {
-    cur.images = mergeImages(cur.images, incoming.images);
-  }
-  if (Array.isArray(incoming.videos) && incoming.videos.length) {
-    cur.videos = mergeVideos(cur.videos, incoming.videos);
-  }
-  if (Array.isArray(incoming.skus) && incoming.skus.length) {
-    if (!cur.skus.length || incoming.skus.length >= cur.skus.length) {
+    if (sameItem && cur.clickedSku && incoming.fromZzbStore && Array.isArray(incoming.skus) && incoming.skus.length) {
       cur.skus = incoming.skus;
     }
-  }
   tabState.set(tabId, cur);
 }
 

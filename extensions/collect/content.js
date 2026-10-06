@@ -44,11 +44,17 @@
   );
 
   setInterval(scan, 1500);
-  scan();
 
   if (isTop && /item\.taobao\.com|detail\.tmall\.com/i.test(href)) {
+    report({
+      resetSession: true,
+      itemId: (href.match(/[?&]id=(\d+)/) || [])[1] || "",
+      url: href,
+      platform: /tmall/i.test(href) ? "tmall" : "taobao",
+    });
     mountPanel();
   }
+  scan();
 
   function scan() {
     const payload = {
@@ -60,15 +66,15 @@
     const id = (href.match(/[?&]id=(\d+)/) || [])[1] || "";
     if (id) payload.itemId = id;
     const stored = harvestZzbStore();
-    const media = extractMedia();
-    const images = stored.images.length ? stored.images : media.images;
-    const videos = stored.videos.length ? stored.videos : media.videos;
-    if (images.length) payload.images = images;
-    if (videos.length) payload.videos = videos;
-    const skus = stored.skus.length ? stored.skus : extractSkus();
-    if (skus.length) payload.skus = skus;
+    if (stored.fromZzbStore) {
+      payload.fromZzbStore = true;
+      if (stored.zzbItemId) payload.zzbItemId = stored.zzbItemId;
+      payload.images = stored.images;
+      payload.videos = stored.videos;
+      payload.skus = stored.skus;
+    }
     if (stored.storedTitle) payload.zzbTitle = stored.storedTitle;
-    if (payload.images || payload.skus || payload.videos || payload.itemId || payload.url) {
+    if (payload.fromZzbStore || payload.itemId || payload.url) {
       report(payload);
     }
   }
@@ -131,6 +137,8 @@
       });
     };
     const list = lsJson("fileList_tb");
+    const pack = lsJson("sku复制传值数据");
+    const hasStore = Array.isArray(list) || !!(pack && pack.myItemInfo);
     if (Array.isArray(list)) {
       list.forEach((item) => {
         if (!item) return;
@@ -147,7 +155,10 @@
         if (cate === 2) addSku(item);
       });
     }
-    const pack = lsJson("sku复制传值数据");
+    const packItem = pack && pack.myItemInfo && pack.myItemInfo.item;
+    const zzbItemId = String(
+      (pack && pack.itemId) || (packItem && (packItem.itemId || packItem.numIid)) || ""
+    );
     if (pack && pack.myItemInfo) {
       const info = pack.myItemInfo;
       if (info.pcVideo) addVid(info.pcVideo);
@@ -158,7 +169,7 @@
     if (!skus.length && pack && Array.isArray(pack.skuInfos)) {
       pack.skuInfos.forEach(addSku);
     }
-    return { images, videos, skus, storedTitle: zzbStoredTitle() };
+    return { images, videos, skus, storedTitle: zzbStoredTitle(), fromZzbStore: hasStore, zzbItemId };
   }
 
   function looksLikeTitle(raw) {
@@ -842,18 +853,27 @@
     let hint = "请点商品标题上方至尊宝悬浮条里的「标题」，再点「手机端主图视频SKU」。";
     if (!state.title) {
       if (state.clickedTitle) hint = "已点标题，正在读取…";
-    } else {
+    } else if (!state.clickedMedia) {
       hint = "标题已抓到。请点至尊宝「手机端主图视频SKU」。";
-      if (state.clickedMedia && c.main === 0) hint = "已点主图工具，正在等弹层加载…";
-      if (c.main > 0) hint = "主图已抓到。请再点「SKU工具」抓规格表。";
-      if (c.main > 0 && c.video > 0) hint = "主图和视频已抓到。请再点「SKU工具」抓规格表。";
-      if (c.main > 0 && c.sku > 0) hint = "可以上传了。先选品牌和分类，再点上传。";
-      if (c.main > 0 && c.sku > 0 && c.video > 0) hint = "可以上传了。视频会按 1:1 / 3:4 / 16:9 / 9:16 入库。";
-      if (state.clickedSku && c.sku === 0) hint = "已点 SKU 工具，正在等规格表加载…";
+    } else if (c.main === 0) {
+      hint = "已点主图工具，正在等弹层加载…";
+    } else if (!state.clickedSku) {
+      hint = c.video > 0 ? "主图和视频已抓到。请再点「SKU工具」抓规格表。" : "主图已抓到。请再点「SKU工具」抓规格表。";
+    } else if (c.sku === 0) {
+      hint = "已点 SKU 工具，正在等规格表加载…";
+    } else if (c.video > 0) {
+      hint = "可以上传了。视频会按 1:1 / 3:4 / 16:9 / 9:16 入库。";
+    } else {
+      hint = "可以上传了。先选品牌和分类，再点上传。";
     }
     panel.querySelector("#pc-hint").textContent = hint;
-    panel.querySelector("#pc-hint").className = "hint " + (c.main > 0 ? "ok" : "wait");
-    panel.querySelector("#pc-upload").disabled = !(state.title && c.main > 0);
+    panel.querySelector("#pc-hint").className = "hint " + (c.main > 0 && state.clickedSku ? "ok" : "wait");
+    panel.querySelector("#pc-upload").disabled = !(
+      state.title &&
+      state.clickedMedia &&
+      c.main > 0 &&
+      state.clickedSku
+    );
     panel.dataset.state = JSON.stringify(state);
   }
 
