@@ -12,6 +12,7 @@ type ProductCollectTaskDTO struct {
 	AgentJobID   uint64 `json:"agentJobId"`
 	AgentID      uint64 `json:"agentId"`
 	AgentName    string `json:"agentName"`
+	ProductID    uint64 `json:"productId,omitempty"`
 	Status       string `json:"status"`
 	Message      string `json:"message"`
 	CreatedAt    string `json:"createdAt"`

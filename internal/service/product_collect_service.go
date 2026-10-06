@@ -12,12 +12,13 @@ import (
 )
 
 type ProductCollectService struct {
-	repos  *repo.Repos
-	agents *agentscenter.Client
+	repos    *repo.Repos
+	agents   *agentscenter.Client
+	products *ProductService
 }
 
-func NewProductCollectService(repos *repo.Repos, agents *agentscenter.Client) *ProductCollectService {
-	return &ProductCollectService{repos: repos, agents: agents}
+func NewProductCollectService(repos *repo.Repos, agents *agentscenter.Client, products *ProductService) *ProductCollectService {
+	return &ProductCollectService{repos: repos, agents: agents, products: products}
 }
 
 func (s *ProductCollectService) Create(tenantID, userID uint64, productURL string) (*dto.ProductCollectTaskDTO, error) {
@@ -69,6 +70,9 @@ func (s *ProductCollectService) List(tenantID uint64, page, pageSize int) ([]dto
 		return nil, 0, err
 	}
 	s.syncJobs(tenantID, list)
+	for i := range list {
+		s.ingestIfNeeded(tenantID, &list[i])
+	}
 	out := make([]dto.ProductCollectTaskDTO, 0, len(list))
 	for _, task := range list {
 		out = append(out, toCollectDTO(task))
@@ -128,7 +132,73 @@ func (s *ProductCollectService) syncJobs(tenantID uint64, list []model.ProductCo
 		list[i].ErrorMessage = job.ErrorMessage
 		list[i].ResultJSON = job.ResultJSON
 		_ = s.repos.ProductCollect.Save(&list[i])
+		s.ingestIfNeeded(tenantID, &list[i])
 	}
+}
+
+func (s *ProductCollectService) ingestIfNeeded(tenantID uint64, task *model.ProductCollectTask) {
+	if s.products == nil || task == nil || task.Status != "succeeded" || strings.TrimSpace(task.ResultJSON) == "" {
+		return
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(task.ResultJSON), &payload); err != nil {
+		return
+	}
+	if _, ok := payload["productId"]; ok {
+		return
+	}
+	if _, ok := payload["ingestError"]; ok {
+		return
+	}
+	raw, ok := payload["product"]
+	if !ok || len(raw) == 0 || string(raw) == "null" {
+		return
+	}
+	var in dto.ProductDTO
+	if err := json.Unmarshal(raw, &in); err != nil {
+		s.patchCollectJSON(task, payload, 0, err.Error())
+		return
+	}
+	in.BrandID = 0
+	in.CategoryID = 0
+	in.IsDraft = 1
+	in.PublishStatus = 0
+	if strings.TrimSpace(in.Unit) == "" {
+		in.Unit = "件"
+	}
+	products := s.products.ForTenant(tenantID)
+	if code := strings.TrimSpace(in.MaterialCode); code != "" {
+		if id, exists := products.IDByMaterialCode(code); exists {
+			s.patchCollectJSON(task, payload, id, "")
+			return
+		}
+	}
+	created, err := products.Create(&in)
+	if err != nil {
+		s.patchCollectJSON(task, payload, 0, err.Error())
+		return
+	}
+	if created != nil {
+		s.patchCollectJSON(task, payload, created.ID, "")
+	}
+}
+
+func (s *ProductCollectService) patchCollectJSON(task *model.ProductCollectTask, payload map[string]json.RawMessage, productID uint64, ingestErr string) {
+	if productID > 0 {
+		b, _ := json.Marshal(productID)
+		payload["productId"] = b
+		delete(payload, "ingestError")
+	}
+	if ingestErr != "" {
+		b, _ := json.Marshal(ingestErr)
+		payload["ingestError"] = b
+	}
+	out, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	task.ResultJSON = string(out)
+	_ = s.repos.ProductCollect.Save(task)
 }
 
 func newestAgent(list []agentscenter.Agent) *agentscenter.Agent {
@@ -171,10 +241,24 @@ func toCollectDTO(task model.ProductCollectTask) dto.ProductCollectTaskDTO {
 		AgentJobID:   task.AgentJobID,
 		AgentID:      task.AgentID,
 		AgentName:    task.AgentName,
+		ProductID:    collectProductID(task.ResultJSON),
 		Status:       task.Status,
 		Message:      collectMessage(task),
 		CreatedAt:    task.CreatedAt.Format(time.RFC3339),
 	}
+}
+
+func collectProductID(resultJSON string) uint64 {
+	if strings.TrimSpace(resultJSON) == "" {
+		return 0
+	}
+	var payload struct {
+		ProductID uint64 `json:"productId"`
+	}
+	if err := json.Unmarshal([]byte(resultJSON), &payload); err != nil {
+		return 0
+	}
+	return payload.ProductID
 }
 
 func collectMessage(task model.ProductCollectTask) string {
@@ -185,10 +269,30 @@ func collectMessage(task model.ProductCollectTask) string {
 		return ""
 	}
 	var payload struct {
-		Message string `json:"message"`
+		Message     string `json:"message"`
+		ProductID   uint64 `json:"productId"`
+		IngestError string `json:"ingestError"`
 	}
 	if err := json.Unmarshal([]byte(task.ResultJSON), &payload); err != nil {
 		return ""
 	}
-	return strings.TrimSpace(payload.Message)
+	msg := strings.TrimSpace(payload.Message)
+	if payload.ProductID > 0 {
+		if msg == "" {
+			return "已写入草稿商品 #" + jsonNumber(payload.ProductID)
+		}
+		return msg + "（草稿商品 #" + jsonNumber(payload.ProductID) + "）"
+	}
+	if errMsg := strings.TrimSpace(payload.IngestError); errMsg != "" {
+		if msg == "" {
+			return "采集成功但入库失败：" + errMsg
+		}
+		return msg + "；入库失败：" + errMsg
+	}
+	return msg
+}
+
+func jsonNumber(v uint64) string {
+	b, _ := json.Marshal(v)
+	return string(b)
 }

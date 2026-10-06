@@ -58,6 +58,7 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 	collectH := admin.NewProductCollectHandler(service.NewProductCollectService(
 		repos,
 		agentscenter.NewClient(cfg.Integrations.AgentsCenterAPIURL, cfg.Integrations.AgentsCenterToken),
+		productSvc,
 	))
 	openProductH := openapi.NewProductHandler(productSvc)
 	openCategoryH := openapi.NewCategoryHandler(categorySvc)
