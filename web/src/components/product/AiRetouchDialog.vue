@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElImageViewer, ElMessage } from 'element-plus'
 import { retouchProductImage } from '../../api/ai'
 import type { UploadContext } from '../../api/upload'
 
@@ -20,6 +20,7 @@ const emit = defineEmits<{
 const prompt = ref('')
 const resultUrl = ref('')
 const busy = ref(false)
+const previewUrl = ref('')
 
 watch(
   () => props.modelValue,
@@ -28,6 +29,7 @@ watch(
     prompt.value = ''
     resultUrl.value = ''
     busy.value = false
+    previewUrl.value = ''
   },
 )
 
@@ -79,7 +81,7 @@ async function run() {
       <div class="preview">
         <div class="pane">
           <div class="pane-title">原图</div>
-          <img v-if="source" :src="source" alt="原图" />
+          <img v-if="source" class="zoomable" :src="source" alt="原图" title="点击预览" @click="previewUrl = source" />
         </div>
         <div class="pane">
           <div class="pane-title">结果</div>
@@ -104,6 +106,7 @@ async function run() {
         <p class="hint">替换或添加后，点页面上的保存才会写进这件商品。</p>
       </aside>
     </div>
+    <el-image-viewer v-if="previewUrl" :url-list="[previewUrl]" teleported :z-index="4000" @close="previewUrl = ''" />
   </el-dialog>
 </template>
 
@@ -143,6 +146,10 @@ async function run() {
   object-fit: contain;
   background: #fff;
   border-radius: 4px;
+}
+
+.zoomable {
+  cursor: zoom-in;
 }
 
 .empty {

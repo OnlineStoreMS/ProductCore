@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElImageViewer, ElMessage } from 'element-plus'
 import { retouchProductImage } from '../../api/ai'
 import type { UploadContext } from '../../api/upload'
 
@@ -32,6 +32,7 @@ const emit = defineEmits<{
 const prompt = ref('')
 const busy = ref(false)
 const progress = ref('')
+const previewUrl = ref('')
 const rows = ref<BatchRow[]>([])
 let runId = 0
 
@@ -41,6 +42,7 @@ watch(
     runId += 1
     busy.value = false
     progress.value = ''
+    previewUrl.value = ''
     if (!open) return
     prompt.value = ''
     rows.value = props.items.map((item) => ({
@@ -171,7 +173,7 @@ function replaceSelected() {
           <div class="pair">
             <div class="pane">
               <div class="pane-title">原图</div>
-              <img :src="row.url" alt="原图" />
+              <img class="zoomable" :src="row.url" alt="原图" title="点击预览" @click="previewUrl = row.url" />
             </div>
             <div class="pane">
               <div class="pane-title">结果</div>
@@ -197,6 +199,7 @@ function replaceSelected() {
         <p class="hint">只替换已勾选并且已经出结果的图片。没勾选、没出结果的保持原图。替换后，点页面上的保存才会写进这件商品。</p>
       </aside>
     </div>
+    <el-image-viewer v-if="previewUrl" :url-list="[previewUrl]" teleported :z-index="4000" @close="previewUrl = ''" />
   </el-dialog>
 </template>
 
@@ -287,6 +290,10 @@ function replaceSelected() {
   object-fit: contain;
   background: #fff;
   border-radius: 4px;
+}
+
+.zoomable {
+  cursor: zoom-in;
 }
 
 .empty {
