@@ -27,6 +27,7 @@ func RegisterRoutes(
 	g.POST("/products/batch/force-delete", productH.BatchForceDelete)
 	g.GET("/products/:id", productH.Get)
 	g.POST("/products", productH.Create)
+	g.POST("/products/:id/copy", productH.Copy)
 	g.POST("/products/draft", productH.CreateDraft)
 	g.POST("/products/import", importH.Import)
 	g.GET("/products/:id/export", importH.Export)

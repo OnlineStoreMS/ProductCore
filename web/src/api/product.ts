@@ -27,6 +27,11 @@ export async function fetchProduct(id: number) {
   return unwrap<Product>(res)
 }
 
+export async function copyProduct(id: number) {
+  const res = await client.post(`/products/${id}/copy`)
+  return unwrap<Product>(res)
+}
+
 export async function createProduct(data: ProductForm) {
   const res = await client.post('/products', data)
   return unwrap<Product>(res)

@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Search, Edit, Delete, View, Upload, Download } from '@element-plus/icons-vue'
+import { Search, Edit, Delete, View, Upload, Download, CopyDocument } from '@element-plus/icons-vue'
 import ProductDetailDrawer from '../../components/product/ProductDetailDrawer.vue'
 import ProductImportDialog from '../../components/product/ProductImportDialog.vue'
 import ProductSkuManageDialog from '../../components/product/ProductSkuManageDialog.vue'
@@ -14,6 +14,7 @@ import {
   fetchGroupTree,
   fetchKeywords,
   fetchProducts,
+  copyProduct,
   exportProduct,
   updateProductPublishStatus,
 } from '../../api/product'
@@ -107,6 +108,21 @@ onMounted(async () => {
 
 function handleEdit(row: Product) {
   router.push(`/products/${row.id}/edit`)
+}
+
+const copyingId = ref<number>()
+
+async function handleCopy(row: Product) {
+  copyingId.value = row.id
+  try {
+    const created = await copyProduct(row.id)
+    ElMessage.success('已复制为新商品，资料编码和货号已留空')
+    router.push(`/products/${created.id}/edit`)
+  } catch (e) {
+    ElMessage.error((e as Error).message || '复制失败')
+  } finally {
+    copyingId.value = undefined
+  }
 }
 
 async function handleDelete(row: Product) {
@@ -322,10 +338,11 @@ function onListingSaved(productId: number, shops: ListedShop[]) {
             <el-switch :model-value="!!row.publishStatus" @change="togglePublish(row)" />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="230" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link :icon="View" @click="handleView(row)">查看</el-button>
             <el-button type="primary" link :icon="Edit" @click="handleEdit(row)">编辑</el-button>
+            <el-button type="primary" link :icon="CopyDocument" :loading="copyingId === row.id" @click="handleCopy(row)">复制</el-button>
             <el-button
               type="primary"
               link

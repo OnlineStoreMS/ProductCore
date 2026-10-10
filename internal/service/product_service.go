@@ -177,6 +177,69 @@ func (s *ProductService) Create(in *dto.ProductDTO) (*dto.ProductDTO, error) {
 	return out, err
 }
 
+// Copy 复制为新商品。资料编码、货号留空，规格编码重新生成，默认下架。
+func (s *ProductService) Copy(id uint64) (*dto.ProductDTO, error) {
+	p, err := s.repo.GetByID(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	src, err := s.toDTO(p, true)
+	if err != nil {
+		return nil, err
+	}
+	src.ID = 0
+	src.Name = copyProductName(src.Name)
+	src.MaterialCode = ""
+	src.ProductSn = ""
+	src.PublishStatus = 0
+	src.IsDraft = 0
+	src.Sale = 0
+	src.Finalize = false
+	used := map[string]struct{}{}
+	for i := range src.Skus {
+		src.Skus[i].ID = 0
+		code, err := s.nextFreeSkuCode(used)
+		if err != nil {
+			return nil, err
+		}
+		src.Skus[i].SkuCode = code
+	}
+	return s.Create(src)
+}
+
+func copyProductName(name string) string {
+	name = strings.TrimSpace(name)
+	const suffix = " 副本"
+	const maxLen = 200
+	runes := []rune(name)
+	extra := []rune(suffix)
+	if len(runes)+len(extra) > maxLen {
+		keep := maxLen - len(extra)
+		if keep < 1 {
+			keep = 1
+		}
+		runes = runes[:keep]
+	}
+	return string(runes) + suffix
+}
+
+func (s *ProductService) nextFreeSkuCode(used map[string]struct{}) (string, error) {
+	for i := 0; i < 20; i++ {
+		code := util.NextRandomSkuCode(used)
+		n, err := s.repo.CountSkuByCode(code, 0)
+		if err != nil {
+			return "", err
+		}
+		if n == 0 {
+			return code, nil
+		}
+	}
+	return "", fmt.Errorf("%w: 规格编码", ErrDuplicateSku)
+}
+
 func (s *ProductService) Update(id uint64, in *dto.ProductDTO) (*dto.ProductDTO, error) {
 	if err := s.ensureUniqueMaterialCode(in.MaterialCode, id); err != nil {
 		return nil, err

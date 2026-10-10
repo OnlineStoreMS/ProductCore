@@ -15,7 +15,7 @@ import (
 )
 
 type ProductHandler struct {
-	svc       *service.ProductService
+	svc        *service.ProductService
 	listingSvc *service.PlatformListingService
 }
 
@@ -140,6 +140,31 @@ func (h *ProductHandler) Create(c *gin.Context) {
 		return
 	}
 	item, err := h.ps(c).Create(&in)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.Created(c, item)
+}
+
+// Copy godoc
+//
+//	@Summary		复制商品
+//	@Description	按已有商品创建一条新商品。资料编码和货号留空，规格编码重新生成，默认下架。
+//	@Tags			admin-商品
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"商品 ID"
+//	@Success		201	{object}	response.ProductResp
+//	@Failure		404	{object}	response.Body
+//	@Router			/admin/products/{id}/copy [post]
+func (h *ProductHandler) Copy(c *gin.Context) {
+	id, err := httputil.ParseID(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	item, err := h.ps(c).Copy(id)
 	if err != nil {
 		httputil.HandleServiceError(c, err)
 		return
