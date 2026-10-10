@@ -34,6 +34,8 @@ auth:
 integrations:
   agentscenter_api_url: "http://127.0.0.1:8107"
   agentscenter_internal_token: ""
+  aimodelcore_api_url: "http://127.0.0.1:8109"
+  aimodelcore_internal_token: ""
 
 storage:
   driver: minio                 # local | minio（改此项切换存储）

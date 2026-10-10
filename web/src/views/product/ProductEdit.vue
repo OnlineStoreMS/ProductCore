@@ -744,11 +744,11 @@ function scrollTo(href: string) {
           <h3 class="block-title">图文信息</h3>
 
           <ErpFormRow label="商品主图" required :hint="MEDIA_HINTS.main">
-            <PictureCardUpload v-model="mainPicList" :max="10" sortable :rules="MEDIA_UPLOAD_RULES.main" :upload-context="uploadCtx('main')" />
+            <PictureCardUpload v-model="mainPicList" :max="10" sortable ai-retouch :rules="MEDIA_UPLOAD_RULES.main" :upload-context="uploadCtx('main')" />
           </ErpFormRow>
 
           <ErpFormRow label="3:4主图" :hint="MEDIA_HINTS.pic34">
-            <PictureCardUpload v-model="pics34" :max="5" sortable :rules="MEDIA_UPLOAD_RULES.pic34" :upload-context="uploadCtx('pics34')" />
+            <PictureCardUpload v-model="pics34" :max="5" sortable ai-retouch :rules="MEDIA_UPLOAD_RULES.pic34" :upload-context="uploadCtx('pics34')" />
           </ErpFormRow>
 
           <ErpFormRow label="商品视频" :hint="MEDIA_HINTS.video">
@@ -803,31 +803,32 @@ function scrollTo(href: string) {
           <ErpFormRow label="素材图片" :hint="MEDIA_HINTS.material">
             <div class="material-list">
               <div class="material-item">
-                <PictureCardUpload v-model="materialWhite" :max="1" :rules="MEDIA_UPLOAD_RULES.materialWhite" :upload-context="uploadCtx('material_white')" />
+                <PictureCardUpload v-model="materialWhite" :max="1" ai-retouch :rules="MEDIA_UPLOAD_RULES.materialWhite" :upload-context="uploadCtx('material_white')" />
                 <span>白底图</span>
               </div>
               <div class="material-item">
                 <PictureCardUpload
                   v-model="materialTransparent"
                   :max="1"
+                  ai-retouch
                   :rules="MEDIA_UPLOAD_RULES.materialTransparent"
                   :upload-context="uploadCtx('material_transparent')"
                 />
                 <span>透明图</span>
               </div>
               <div class="material-item">
-                <PictureCardUpload v-model="materialGuide34" :max="1" :rules="MEDIA_UPLOAD_RULES.materialGuide34" :upload-context="uploadCtx('material_guide34')" />
+                <PictureCardUpload v-model="materialGuide34" :max="1" ai-retouch :rules="MEDIA_UPLOAD_RULES.materialGuide34" :upload-context="uploadCtx('material_guide34')" />
                 <span>3:4导购图</span>
               </div>
               <div class="material-item">
-                <PictureCardUpload v-model="materialLong" :max="1" :rules="MEDIA_UPLOAD_RULES.materialLong" :upload-context="uploadCtx('material_long')" />
+                <PictureCardUpload v-model="materialLong" :max="1" ai-retouch :rules="MEDIA_UPLOAD_RULES.materialLong" :upload-context="uploadCtx('material_long')" />
                 <span>宝贝长图</span>
               </div>
             </div>
           </ErpFormRow>
 
           <ErpFormRow label="商品详情图" :hint="MEDIA_HINTS.detail">
-            <PictureCardUpload v-model="detailPics" :max="50" sortable :rules="MEDIA_UPLOAD_RULES.detail" :upload-context="uploadCtx('detail')" />
+            <PictureCardUpload v-model="detailPics" :max="50" sortable ai-retouch :rules="MEDIA_UPLOAD_RULES.detail" :upload-context="uploadCtx('detail')" />
           </ErpFormRow>
 
           <div class="rich-toggle">

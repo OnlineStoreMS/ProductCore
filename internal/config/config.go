@@ -45,6 +45,8 @@ type AuthConfig struct {
 type IntegrationsConfig struct {
 	AgentsCenterAPIURL string `mapstructure:"agentscenter_api_url"`
 	AgentsCenterToken  string `mapstructure:"agentscenter_internal_token"`
+	AIModelAPIURL      string `mapstructure:"aimodelcore_api_url"`
+	AIModelToken       string `mapstructure:"aimodelcore_internal_token"`
 }
 
 type StorageConfig struct {

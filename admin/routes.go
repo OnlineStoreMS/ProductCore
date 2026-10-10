@@ -16,6 +16,7 @@ func RegisterRoutes(
 	platformShopH *PlatformShopHandler,
 	collectH *ProductCollectHandler,
 	distributionH *DistributionHandler,
+	aiImageH *AIImageHandler,
 ) {
 	g.GET("/products", productH.List)
 	g.GET("/super-search", productH.SuperSearch)
@@ -71,6 +72,7 @@ func RegisterRoutes(
 	g.POST("/upload/batch", uploadH.UploadBatch)
 	g.POST("/upload/video", uploadH.UploadVideo)
 	g.POST("/upload/from-url", uploadH.UploadFromURL)
+	g.POST("/ai/images/retouch", aiImageH.Retouch)
 
 	g.GET("/platform-types", platformTypeH.List)
 	g.GET("/platform-types/enabled", platformTypeH.ListEnabled)

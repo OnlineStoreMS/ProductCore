@@ -7,6 +7,7 @@ import { uploadImage, uploadImagesBatch, uploadVideo } from '../../api/upload'
 import type { UploadContext } from '../../api/upload'
 import type { UploadValidateRules } from '../../utils/uploadValidate'
 import { acceptFromRules, validateUploadFile } from '../../utils/uploadValidate'
+import AiRetouchDialog from './AiRetouchDialog.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -20,6 +21,7 @@ const props = withDefaults(
     sortable?: boolean
     rules?: UploadValidateRules
     uploadContext?: UploadContext
+    aiRetouch?: boolean
   }>(),
   {
     max: 10,
@@ -28,6 +30,7 @@ const props = withDefaults(
     disabled: false,
     size: 'default',
     sortable: false,
+    aiRetouch: false,
   },
 )
 
@@ -235,9 +238,37 @@ function openVideoPreview(url: string) {
   videoPreviewUrl.value = url
 }
 
+const retouchOpen = ref(false)
+const retouchIndex = ref(0)
+
 function openImagePreview(index: number) {
+  if (props.aiRetouch && props.mode === 'image') {
+    retouchIndex.value = index
+    retouchOpen.value = true
+    return
+  }
   imageViewerIndex.value = index
   imageViewerVisible.value = true
+}
+
+function applyRetouch(url: string, mode: 'replace' | 'add') {
+  if (!url) return
+  if (mode === 'replace') {
+    const next = [...list.value]
+    const index = retouchIndex.value
+    if (index < 0 || index >= next.length) return
+    next[index] = url
+    list.value = next
+    ElMessage.success('已替换当前图')
+  } else {
+    if (list.value.length >= props.max) {
+      ElMessage.warning(`最多 ${props.max} 张`)
+      return
+    }
+    list.value = [...list.value, url]
+    ElMessage.success('已添加为新图')
+  }
+  retouchOpen.value = false
 }
 
 function closeImagePreview() {
@@ -344,6 +375,16 @@ function resetDrag() {
       :initial-index="imageViewerIndex"
       teleported
       @close="closeImagePreview"
+    />
+
+    <AiRetouchDialog
+      v-if="aiRetouch"
+      v-model="retouchOpen"
+      :source="list[retouchIndex] || ''"
+      :upload-context="uploadContext"
+      :can-add="list.length < max"
+      @replace="applyRetouch($event, 'replace')"
+      @add="applyRetouch($event, 'add')"
     />
 
     <el-dialog
