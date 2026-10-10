@@ -35,6 +35,13 @@ const menuItems: MenuEntry[] = [
     ],
   },
   {
+    title: '铺货管理',
+    icon: Shop,
+    children: [
+      { path: '/distribution-shops', title: '铺货店铺', icon: Grid },
+    ],
+  },
+  {
     title: '渠道管理',
     icon: Shop,
     children: [
@@ -54,6 +61,7 @@ const menuItems: MenuEntry[] = [
 
 function openKeysForPath(path: string): string[] {
   if (path.startsWith('/products') || path.startsWith('/groups') || path.startsWith('/keywords') || path.startsWith('/product-collect')) return ['商品管理']
+  if (path.startsWith('/distribution')) return ['铺货管理']
   if (path.startsWith('/platform')) return ['渠道管理']
   if (path.startsWith('/categories') || path.startsWith('/brands')) return ['基础数据']
   return []

@@ -15,6 +15,7 @@ func RegisterRoutes(
 	platformTypeH *PlatformTypeHandler,
 	platformShopH *PlatformShopHandler,
 	collectH *ProductCollectHandler,
+	distributionH *DistributionHandler,
 ) {
 	g.GET("/products", productH.List)
 	g.GET("/super-search", productH.SuperSearch)
@@ -85,4 +86,12 @@ func RegisterRoutes(
 	g.GET("/product-collects", collectH.List)
 	g.DELETE("/product-collects", collectH.Clear)
 	g.POST("/product-collects/ingest", collectH.Ingest)
+
+	g.GET("/distribution-shops", distributionH.ListShops)
+	g.POST("/distribution-shops", distributionH.CreateShop)
+	g.GET("/distribution-shops/:id", distributionH.GetShop)
+	g.PUT("/distribution-shops/:id", distributionH.UpdateShop)
+	g.DELETE("/distribution-shops/:id", distributionH.DeleteShop)
+	g.GET("/distribution-shops/:id/items", distributionH.ListItems)
+	g.POST("/distribution-shops/:id/items/import", distributionH.ImportItems)
 }

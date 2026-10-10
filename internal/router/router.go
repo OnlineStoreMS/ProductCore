@@ -60,6 +60,7 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 		agentscenter.NewClient(cfg.Integrations.AgentsCenterAPIURL, cfg.Integrations.AgentsCenterToken),
 		productSvc,
 	))
+	distributionH := admin.NewDistributionHandler(service.NewDistributionService(repos, store))
 	openProductH := openapi.NewProductHandler(productSvc)
 	openCategoryH := openapi.NewCategoryHandler(categorySvc)
 
@@ -73,13 +74,13 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 	adminGroup := v1.Group("/admin")
 	jwtMgr := jwtmgr.NewManager(cfg.Auth.JWTSecret)
 	adminGroup.Use(adminmw.AdminAuth(&cfg.Auth, jwtMgr))
-	admin.RegisterRoutes(adminGroup, productH, brandH, categoryH, groupH, keywordH, uploadH, importH, platformTypeH, platformShopH, collectH)
+	admin.RegisterRoutes(adminGroup, productH, brandH, categoryH, groupH, keywordH, uploadH, importH, platformTypeH, platformShopH, collectH, distributionH)
 
 	openapi.RegisterRoutes(v1.Group("/open"), openProductH, openCategoryH)
 
 	legacy := v1.Group("")
 	legacy.Use(adminmw.AdminAuth(&cfg.Auth, jwtMgr))
-	admin.RegisterRoutes(legacy, productH, brandH, categoryH, groupH, keywordH, uploadH, importH, platformTypeH, platformShopH, collectH)
+	admin.RegisterRoutes(legacy, productH, brandH, categoryH, groupH, keywordH, uploadH, importH, platformTypeH, platformShopH, collectH, distributionH)
 
 	return r
 }

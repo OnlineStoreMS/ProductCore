@@ -28,6 +28,8 @@
 //	@tag.description	平台店铺与铺货
 //	@tag.name		admin-采集
 //	@tag.description	电商商品链接采集，下发到 WindowsAgent
+//	@tag.name		admin-铺货
+//	@tag.description	铺货店铺与至尊宝店铺商品导入
 //	@tag.name		open-商品
 //	@tag.description	对外 Open API（只读，已上架商品）
 package main
