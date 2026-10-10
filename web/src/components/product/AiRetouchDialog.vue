@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import { ElImageViewer, ElMessage } from 'element-plus'
 import { retouchProductImage } from '../../api/ai'
 import type { UploadContext } from '../../api/upload'
+import ImageFileMeta from './ImageFileMeta.vue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -82,11 +83,13 @@ async function run() {
         <div class="pane">
           <div class="pane-title">原图</div>
           <img v-if="source" class="zoomable" :src="source" alt="原图" title="点击预览" @click="previewUrl = source" />
+          <ImageFileMeta v-if="source" :url="source" />
         </div>
         <div class="pane">
           <div class="pane-title">结果</div>
-          <img v-if="resultUrl" :src="resultUrl" alt="修图结果" />
+          <img v-if="resultUrl" class="zoomable" :src="resultUrl" alt="修图结果" title="点击预览" @click="previewUrl = resultUrl" />
           <div v-else class="empty">修图后显示在这里</div>
+          <ImageFileMeta v-if="resultUrl" :url="resultUrl" />
         </div>
       </div>
       <aside class="tool">

@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { ElImageViewer, ElMessage } from 'element-plus'
 import { retouchProductImage } from '../../api/ai'
 import type { UploadContext } from '../../api/upload'
+import ImageFileMeta from './ImageFileMeta.vue'
 
 export interface BatchRetouchSource {
   key: string
@@ -174,11 +175,13 @@ function replaceSelected() {
             <div class="pane">
               <div class="pane-title">原图</div>
               <img class="zoomable" :src="row.url" alt="原图" title="点击预览" @click="previewUrl = row.url" />
+              <ImageFileMeta :url="row.url" />
             </div>
             <div class="pane">
               <div class="pane-title">结果</div>
-              <img v-if="row.resultUrl" :src="row.resultUrl" alt="修图结果" />
+              <img v-if="row.resultUrl" class="zoomable" :src="row.resultUrl" alt="修图结果" title="点击预览" @click="previewUrl = row.resultUrl" />
               <div v-else class="empty">{{ row.selected ? '修图后显示在这里' : '未勾选，不处理' }}</div>
+              <ImageFileMeta v-if="row.resultUrl" :url="row.resultUrl" />
             </div>
           </div>
         </div>
