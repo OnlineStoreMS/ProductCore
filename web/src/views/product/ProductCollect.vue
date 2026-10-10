@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { fetchProductCollects, type ProductCollectTask } from '../../api/collect'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { clearProductCollects, fetchProductCollects, type ProductCollectTask } from '../../api/collect'
 
 const loading = ref(false)
+const clearing = ref(false)
 const tableData = ref<ProductCollectTask[]>([])
 const total = ref(0)
 const page = ref(1)
@@ -58,6 +59,29 @@ function onPageChange(next: number) {
   loadData()
 }
 
+async function clearRecords() {
+  try {
+    await ElMessageBox.confirm('确定清空全部采集记录？已生成的商品不会删除。', '清空采集记录', {
+      type: 'warning',
+      confirmButtonText: '清空',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return
+  }
+  clearing.value = true
+  try {
+    await clearProductCollects()
+    page.value = 1
+    ElMessage.success('采集记录已清空')
+    await loadData()
+  } catch (e) {
+    ElMessage.error(errorText(e, '清空失败'))
+  } finally {
+    clearing.value = false
+  }
+}
+
 onMounted(() => {
   loadData()
 })
@@ -78,7 +102,10 @@ onMounted(() => {
     <el-card v-loading="loading" class="list-card">
       <template #header>
         <span>采集记录</span>
-        <el-button link type="primary" @click="loadData()">刷新</el-button>
+        <span class="header-actions">
+          <el-button link type="danger" :loading="clearing" @click="clearRecords">清空</el-button>
+          <el-button link type="primary" @click="loadData()">刷新</el-button>
+        </span>
       </template>
       <el-table :data="tableData" stripe border>
         <el-table-column label="时间" width="180">
@@ -121,6 +148,12 @@ onMounted(() => {
 
 .list-card {
   margin-top: 16px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .pager {

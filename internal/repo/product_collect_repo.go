@@ -20,6 +20,10 @@ func (r *ProductCollectRepo) Save(task *model.ProductCollectTask) error {
 	return r.db.Save(task).Error
 }
 
+func (r *ProductCollectRepo) Clear(tenantID uint64) error {
+	return r.db.Unscoped().Scopes(scopeTenant(tenantID)).Delete(&model.ProductCollectTask{}).Error
+}
+
 func (r *ProductCollectRepo) List(tenantID uint64, page, pageSize int) ([]model.ProductCollectTask, int64, error) {
 	if page <= 0 {
 		page = 1

@@ -76,3 +76,21 @@ func (h *ProductCollectHandler) List(c *gin.Context) {
 	}
 	response.OK(c, response.PageResult(list, total, page, pageSize))
 }
+
+// Clear godoc
+//
+//	@Summary		清空采集记录
+//	@Description	删除本租户全部商品采集记录，不删除已生成的商品
+//	@Tags			admin-采集
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	response.EmptyResp
+//	@Failure		500	{object}	response.Body
+//	@Router			/admin/product-collects [delete]
+func (h *ProductCollectHandler) Clear(c *gin.Context) {
+	if err := h.svc.Clear(authcontext.TenantID(c)); err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, nil)
+}

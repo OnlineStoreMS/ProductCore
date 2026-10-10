@@ -97,6 +97,10 @@ func (s *ProductCollectService) IngestFromExtension(tenantID, userID uint64, pro
 	return &dtoTask, nil
 }
 
+func (s *ProductCollectService) Clear(tenantID uint64) error {
+	return s.repos.ProductCollect.Clear(repo.NormalizeTenantID(tenantID))
+}
+
 func (s *ProductCollectService) List(tenantID uint64, page, pageSize int) ([]dto.ProductCollectTaskDTO, int64, error) {
 	tenantID = repo.NormalizeTenantID(tenantID)
 	list, total, err := s.repos.ProductCollect.List(tenantID, page, pageSize)

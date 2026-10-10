@@ -18,3 +18,7 @@ export async function fetchProductCollects(page = 1, pageSize = 20) {
   const res = await client.get('/product-collects', { params: { page, pageSize } })
   return unwrap<PageData<ProductCollectTask>>(res)
 }
+
+export async function clearProductCollects() {
+  await client.delete('/product-collects')
+}
