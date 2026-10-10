@@ -936,6 +936,10 @@
     err.textContent = "上传中…";
     const state = JSON.parse(panel.dataset.state || "{}");
     const product = toProduct(state, brandId, categoryId);
+    if (!product.materialCode) {
+      err.textContent = "没有商品ID，不能按资料编码入库。";
+      return;
+    }
     chrome.storage.local.set({ brandId: brandId, categoryId: categoryId });
     chrome.runtime.sendMessage(
       {
@@ -954,7 +958,7 @@
         }
         const id = res.task && res.task.productId;
         err.className = "ok";
-        err.textContent = id ? "已写入草稿商品 #" + id : res.task && res.task.message ? res.task.message : "已上传";
+        err.textContent = (res.task && res.task.message) || (id ? "已按资料编码写入商品 #" + id : "已上传");
       }
     );
   }

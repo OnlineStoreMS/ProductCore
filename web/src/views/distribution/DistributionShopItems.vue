@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Upload } from '@element-plus/icons-vue'
 import {
   fetchDistributionItems,
   fetchDistributionShop,
   importDistributionItems,
+  type DistributionImportResult,
   type DistributionItem,
   type DistributionShop,
 } from '../../api/distribution'
+import ProductDetailDrawer from '../../components/product/ProductDetailDrawer.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -23,9 +25,14 @@ const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const keyword = ref('')
+const collected = ref<'' | '1' | '0'>('')
+const sortBy = ref('sales')
+const sortOrder = ref<'asc' | 'desc'>('desc')
 const fileInput = ref<HTMLInputElement | null>(null)
 const detailVisible = ref(false)
 const detail = ref<DistributionItem | null>(null)
+const productVisible = ref(false)
+const productId = ref<number>()
 
 function errorText(e: unknown, fallback: string) {
   const err = e as { response?: { data?: { message?: string } }; message?: string }
@@ -35,6 +42,13 @@ function errorText(e: unknown, fallback: string) {
 function dash(value?: string) {
   const text = (value || '').trim()
   return text || '-'
+}
+
+function importText(result: DistributionImportResult) {
+  const parts = [`新增 ${result.created}`, `更新 ${result.updated}`]
+  if (result.removed) parts.push(`移除 ${result.removed}`)
+  if (result.imageFailed) parts.push(`图片失败 ${result.imageFailed}`)
+  return parts.join('，')
 }
 
 function itemLink(row: DistributionItem) {
@@ -52,6 +66,9 @@ async function loadData() {
   try {
     const data = await fetchDistributionItems(shopId.value, {
       keyword: keyword.value || undefined,
+      collected: collected.value || undefined,
+      sortBy: sortBy.value,
+      sortOrder: sortOrder.value,
       page: page.value,
       pageSize: pageSize.value,
     })
@@ -78,7 +95,25 @@ function handleSearch() {
   loadData()
 }
 
-function pickFile() {
+function onSort(e: { prop: string; order: 'ascending' | 'descending' | null }) {
+  const nextBy = e.order ? e.prop : 'sales'
+  const nextOrder: 'asc' | 'desc' = e.order === 'ascending' ? 'asc' : 'desc'
+  if (nextBy === sortBy.value && nextOrder === sortOrder.value) return
+  sortBy.value = nextBy
+  sortOrder.value = nextOrder
+  page.value = 1
+  loadData()
+}
+
+async function pickFile() {
+  try {
+    await ElMessageBox.confirm('本次导入以表格为准。表里有的商品会覆盖更新，表里没有的商品会从这家店铺移除。', '导入店铺商品', {
+      type: 'warning',
+      confirmButtonText: '导入',
+    })
+  } catch {
+    return
+  }
   fileInput.value?.click()
 }
 
@@ -90,8 +125,7 @@ async function onFile(ev: Event) {
   importing.value = true
   try {
     const result = await importDistributionItems(shopId.value, file)
-    const imageNote = result.imageFailed ? `，图片失败 ${result.imageFailed}` : ''
-    ElMessage.success(`导入完成：新增 ${result.created}，更新 ${result.updated}${imageNote}`)
+    ElMessage.success(`导入完成：${importText(result)}`)
     page.value = 1
     await loadShop()
     await loadData()
@@ -105,6 +139,12 @@ async function onFile(ev: Event) {
 function openDetail(row: DistributionItem) {
   detail.value = row
   detailVisible.value = true
+}
+
+function openProduct(row: DistributionItem) {
+  if (!row.productId) return
+  productId.value = row.productId
+  productVisible.value = true
 }
 
 function openSame(row: DistributionItem) {
@@ -128,6 +168,10 @@ function openSame(row: DistributionItem) {
           <el-tag size="small" type="info">{{ total }} 件</el-tag>
         </div>
         <div class="header-actions">
+          <el-select v-model="collected" clearable placeholder="是否采集" style="width: 120px" @change="handleSearch">
+            <el-option label="是" value="1" />
+            <el-option label="否" value="0" />
+          </el-select>
           <el-input
             v-model="keyword"
             clearable
@@ -142,7 +186,13 @@ function openSame(row: DistributionItem) {
         </div>
       </template>
 
-      <el-table :data="tableData" stripe border>
+      <el-table
+        :data="tableData"
+        stripe
+        border
+        :default-sort="{ prop: 'sales', order: 'descending' }"
+        @sort-change="onSort"
+      >
         <el-table-column type="selection" width="48" />
         <el-table-column label="商品信息" min-width="360">
           <template #default="{ row }">
@@ -165,23 +215,29 @@ function openSame(row: DistributionItem) {
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="月成交笔数" width="120" align="center">
+        <el-table-column prop="monthDeals" label="月成交笔数" width="130" align="center" sortable="custom">
           <template #default="{ row }">{{ dash(row.monthDeals) }}</template>
         </el-table-column>
-        <el-table-column label="月代销" width="100" align="center">
+        <el-table-column prop="monthConsign" label="月代销" width="110" align="center" sortable="custom">
           <template #default="{ row }">{{ dash(row.monthConsign) }}</template>
         </el-table-column>
-        <el-table-column label="销量" width="100" align="center">
+        <el-table-column prop="sales" label="销量" width="100" align="center" sortable="custom">
           <template #default="{ row }">{{ dash(row.sales) }}</template>
         </el-table-column>
-        <el-table-column label="价格" width="100" align="center">
+        <el-table-column prop="price" label="价格" width="100" align="center" sortable="custom">
           <template #default="{ row }">{{ dash(row.price) }}</template>
         </el-table-column>
-        <el-table-column label="发货时间" width="120" align="center">
+        <el-table-column prop="shipTime" label="发货时间" width="130" align="center" sortable="custom">
           <template #default="{ row }">{{ dash(row.shipTime) }}</template>
         </el-table-column>
-        <el-table-column label="上架时间" width="160" align="center">
+        <el-table-column prop="listedAt" label="上架时间" width="160" align="center" sortable="custom">
           <template #default="{ row }">{{ dash(row.listedAt) }}</template>
+        </el-table-column>
+        <el-table-column label="是否采集" width="100" align="center">
+          <template #default="{ row }">
+            <el-button v-if="row.collected && row.productId" link type="primary" @click="openProduct(row)">是</el-button>
+            <span v-else>否</span>
+          </template>
         </el-table-column>
         <el-table-column label="操作" width="110" fixed="right">
           <template #default="{ row }">
@@ -234,6 +290,7 @@ function openSame(row: DistributionItem) {
         </el-descriptions>
       </template>
     </el-dialog>
+    <ProductDetailDrawer v-model="productVisible" :product-id="productId" />
   </div>
 </template>
 

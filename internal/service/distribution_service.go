@@ -154,9 +154,24 @@ func (s *DistributionService) ListItems(shopID uint64, q dto.DistributionItemQue
 	if err != nil {
 		return nil, 0, err
 	}
+	codes := make([]string, 0, len(list))
+	for i := range list {
+		if code := strings.TrimSpace(list[i].ItemID); code != "" {
+			codes = append(codes, code)
+		}
+	}
+	collected, err := s.repos.Product.WithTenant(s.tenantID).IDsByMaterialCodes(codes)
+	if err != nil {
+		return nil, 0, err
+	}
 	out := make([]dto.DistributionItemDTO, 0, len(list))
 	for i := range list {
-		out = append(out, itemDTO(&list[i]))
+		d := itemDTO(&list[i])
+		if pid, ok := collected[strings.TrimSpace(list[i].ItemID)]; ok && pid > 0 {
+			d.Collected = true
+			d.ProductID = pid
+		}
+		out = append(out, d)
 	}
 	return out, total, nil
 }
@@ -192,7 +207,14 @@ func (s *DistributionService) ImportItems(shopID uint64, file *multipart.FileHea
 	result := &dto.DistributionImportResult{}
 	store := s.shops()
 	picCache := map[string]string{}
+	keep := make([]string, 0, len(rows))
+	seen := map[string]struct{}{}
 	for _, row := range rows {
+		if _, ok := seen[row.ItemID]; ok {
+			continue
+		}
+		seen[row.ItemID] = struct{}{}
+		keep = append(keep, row.ItemID)
 		existing, findErr := store.FindItem(shopID, row.ItemID)
 		if findErr != nil && !errors.Is(findErr, gorm.ErrRecordNotFound) {
 			return nil, findErr
@@ -222,6 +244,11 @@ func (s *DistributionService) ImportItems(shopID uint64, file *multipart.FileHea
 		}
 		result.Updated++
 	}
+	removed, err := store.DeleteItemsExcept(shopID, keep)
+	if err != nil {
+		return nil, err
+	}
+	result.Removed = int(removed)
 	result.Total = result.Created + result.Updated
 	return result, nil
 }

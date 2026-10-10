@@ -1,11 +1,22 @@
 package repo
 
 import (
+	"fmt"
+	"strings"
+
 	"productcore/internal/dto"
 	"productcore/internal/model"
 
 	"gorm.io/gorm"
 )
+
+const collectedProductExists = `EXISTS (
+	SELECT 1 FROM products p
+	WHERE p.tenant_id = distribution_shop_items.tenant_id
+		AND p.material_code = distribution_shop_items.item_id
+		AND p.material_code <> ''
+		AND p.deleted_at IS NULL
+)`
 
 type DistributionRepo struct {
 	db       *gorm.DB
@@ -119,18 +130,53 @@ func (r *DistributionRepo) ListItems(shopID uint64, q dto.DistributionItemQuery)
 		kw := "%" + q.Keyword + "%"
 		tx = tx.Where("title LIKE ? OR item_id LIKE ?", kw, kw)
 	}
+	switch strings.TrimSpace(q.Collected) {
+	case "1":
+		tx = tx.Where(collectedProductExists)
+	case "0":
+		tx = tx.Where("NOT " + collectedProductExists)
+	}
 	var total int64
 	if err := tx.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	var list []model.DistributionShopItem
-	err := tx.Order("id DESC").Offset((q.Page - 1) * q.PageSize).Limit(q.PageSize).Find(&list).Error
+	err := tx.Order(itemOrderSQL(q)).Offset((q.Page - 1) * q.PageSize).Limit(q.PageSize).Find(&list).Error
 	return list, total, err
+}
+
+func itemOrderSQL(q dto.DistributionItemQuery) string {
+	columns := map[string]string{
+		"sales":        "sales",
+		"price":        "price",
+		"monthDeals":   "month_deals",
+		"monthConsign": "month_consign",
+		"shipTime":     "ship_time",
+		"listedAt":     "listed_at",
+	}
+	col := columns[q.SortBy]
+	if col == "" {
+		col = "sales"
+	}
+	dir := "DESC"
+	if strings.EqualFold(strings.TrimSpace(q.SortOrder), "asc") {
+		dir = "ASC"
+	}
+	switch col {
+	case "sales", "price", "month_deals", "month_consign":
+		num := `([0-9]+(\.[0-9]+){0,1})`
+		return fmt.Sprintf(
+			`(CASE WHEN %[1]s ~ '万' THEN NULLIF(substring(%[1]s from '%[2]s'), '')::numeric * 10000 ELSE NULLIF(substring(%[1]s from '%[2]s'), '')::numeric END) %[3]s NULLS LAST, id DESC`,
+			col, num, dir,
+		)
+	default:
+		return fmt.Sprintf(`NULLIF(btrim(%s), '') %s NULLS LAST, id DESC`, col, dir)
+	}
 }
 
 func (r *DistributionRepo) FindItem(shopID uint64, itemID string) (*model.DistributionShopItem, error) {
 	var item model.DistributionShopItem
-	err := r.db.Scopes(scopeTenant(r.tenantID)).
+	err := r.db.Unscoped().Scopes(scopeTenant(r.tenantID)).
 		Where("shop_id = ? AND item_id = ?", shopID, itemID).
 		First(&item).Error
 	if err != nil {
@@ -139,11 +185,21 @@ func (r *DistributionRepo) FindItem(shopID uint64, itemID string) (*model.Distri
 	return &item, nil
 }
 
+func (r *DistributionRepo) DeleteItemsExcept(shopID uint64, keep []string) (int64, error) {
+	tx := r.db.Unscoped().Scopes(scopeTenant(r.tenantID)).Where("shop_id = ?", shopID)
+	if len(keep) > 0 {
+		tx = tx.Where("item_id NOT IN ?", keep)
+	}
+	res := tx.Delete(&model.DistributionShopItem{})
+	return res.RowsAffected, res.Error
+}
+
 func (r *DistributionRepo) CreateItem(item *model.DistributionShopItem) error {
 	item.TenantID = r.tenantID
 	return r.db.Create(item).Error
 }
 
 func (r *DistributionRepo) SaveItem(item *model.DistributionShopItem) error {
-	return r.db.Save(item).Error
+	item.DeletedAt = gorm.DeletedAt{}
+	return r.db.Unscoped().Save(item).Error
 }

@@ -36,17 +36,23 @@ type DistributionItemDTO struct {
 	Tags           string `json:"tags"`
 	SourceShopName string `json:"sourceShopName"`
 	SourceShopURL  string `json:"sourceShopUrl"`
+	Collected      bool   `json:"collected"`
+	ProductID      uint64 `json:"productId,omitempty"`
 }
 
 type DistributionItemQuery struct {
-	Keyword  string `form:"keyword"`
-	Page     int    `form:"page"`
-	PageSize int    `form:"pageSize"`
+	Keyword   string `form:"keyword"`
+	Collected string `form:"collected"` // 1 已采集 0 未采集
+	SortBy    string `form:"sortBy"`
+	SortOrder string `form:"sortOrder"` // asc desc
+	Page      int    `form:"page"`
+	PageSize  int    `form:"pageSize"`
 }
 
 type DistributionImportResult struct {
 	Created     int `json:"created"`
 	Updated     int `json:"updated"`
+	Removed     int `json:"removed"`
 	Skipped     int `json:"skipped"`
 	Total       int `json:"total"`
 	ImageFailed int `json:"imageFailed"`

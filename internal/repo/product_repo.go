@@ -136,6 +136,34 @@ func (r *ProductRepo) GetByID(id uint64) (*model.Product, error) {
 	return &p, nil
 }
 
+func (r *ProductRepo) IDsByMaterialCodes(codes []string) (map[string]uint64, error) {
+	out := map[string]uint64{}
+	if len(codes) == 0 {
+		return out, nil
+	}
+	type row struct {
+		ID           uint64
+		MaterialCode string
+	}
+	var rows []row
+	err := r.db.Scopes(scopeTenant(r.tenantID)).Model(&model.Product{}).
+		Select("id, material_code").
+		Where("material_code IN ?", codes).
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range rows {
+		if item.MaterialCode == "" {
+			continue
+		}
+		if _, ok := out[item.MaterialCode]; !ok {
+			out[item.MaterialCode] = item.ID
+		}
+	}
+	return out, nil
+}
+
 func (r *ProductRepo) GetByMaterialCode(code string) (*model.Product, error) {
 	var p model.Product
 	if err := r.db.Scopes(scopeTenant(r.tenantID)).Where("material_code = ?", code).First(&p).Error; err != nil {

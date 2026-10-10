@@ -183,31 +183,44 @@ func (s *ProductCollectService) ingestIfNeeded(tenantID uint64, task *model.Prod
 		in.Unit = "件"
 	}
 	products := s.products.ForTenant(tenantID)
-	if code := strings.TrimSpace(in.MaterialCode); code != "" {
-		if id, exists := products.IDByMaterialCode(code); exists {
-			s.patchCollectJSON(task, payload, id, "")
-			return
-		}
+	code := strings.TrimSpace(in.MaterialCode)
+	if code == "" {
+		s.patchCollectJSON(task, payload, 0, "资料编码不能为空")
+		return
 	}
+	in.MaterialCode = code
 	var extra []string
 	if rawVideos, ok := payload["videos"]; ok && len(rawVideos) > 0 {
 		_ = json.Unmarshal(rawVideos, &extra)
 	}
 	urls := collectRemoteVideoURLs(&in, extra)
 	stripRemoteVideos(&in)
-	created, err := products.Create(&in)
+	var saved *dto.ProductDTO
+	var err error
+	replaced := false
+	if id, exists := products.IDByMaterialCode(code); exists {
+		saved, err = products.ReplaceCollected(id, &in)
+		replaced = true
+	} else {
+		saved, err = products.Create(&in)
+	}
 	if err != nil {
 		s.patchCollectJSON(task, payload, 0, err.Error())
 		return
 	}
-	if created == nil {
+	if saved == nil {
 		return
 	}
 	var msg string
 	if rawMsg, ok := payload["message"]; ok {
 		_ = json.Unmarshal(rawMsg, &msg)
 	}
-	if imgOK, imgFailed, imgErr := products.ingestRemoteImages(created.ID, &in); imgOK > 0 || imgFailed > 0 || imgErr != nil {
+	if replaced {
+		msg += "，已按资料编码覆盖"
+	} else {
+		msg += "，已按资料编码新建"
+	}
+	if imgOK, imgFailed, imgErr := products.ingestRemoteImages(saved.ID, &in); imgOK > 0 || imgFailed > 0 || imgErr != nil {
 		if imgOK > 0 {
 			msg += "，已转存图片" + jsonNumber(uint64(imgOK))
 		}
@@ -219,7 +232,7 @@ func (s *ProductCollectService) ingestIfNeeded(tenantID uint64, task *model.Prod
 		}
 	}
 	ingestErr := ""
-	if n, skipped, vErr := products.ingestRemoteVideos(created.ID, urls); vErr != nil {
+	if n, skipped, vErr := products.ingestRemoteVideos(saved.ID, urls); vErr != nil {
 		ingestErr = "视频上传失败：" + vErr.Error()
 	} else if n > 0 || skipped > 0 {
 		if n > 0 {
@@ -232,7 +245,7 @@ func (s *ProductCollectService) ingestIfNeeded(tenantID uint64, task *model.Prod
 	if b, err := json.Marshal(msg); err == nil {
 		payload["message"] = b
 	}
-	s.patchCollectJSON(task, payload, created.ID, ingestErr)
+	s.patchCollectJSON(task, payload, saved.ID, ingestErr)
 }
 
 func (s *ProductCollectService) patchCollectJSON(task *model.ProductCollectTask, payload map[string]json.RawMessage, productID uint64, ingestErr string) {

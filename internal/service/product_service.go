@@ -699,6 +699,42 @@ func (s *ProductService) ImportUpsert(in *dto.ProductDTO) (*dto.ProductDTO, erro
 	return nil, err
 }
 
+// ReplaceCollected 按已有商品 ID 整份覆盖采集结果，保留原商品 ID。
+func (s *ProductService) ReplaceCollected(id uint64, in *dto.ProductDTO) (*dto.ProductDTO, error) {
+	if in == nil {
+		return nil, ErrCollectEmpty
+	}
+	if err := s.validateSkuSpecs(in); err != nil {
+		return nil, err
+	}
+	in.Skus = fillMissingSkuCodes(in.Skus)
+	var out *dto.ProductDTO
+	err := s.repo.Transaction(func(tx *repo.ProductRepo) error {
+		p, err := tx.GetByIDUnscoped(id)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrNotFound
+			}
+			return err
+		}
+		if p.DeletedAt.Valid {
+			if err := tx.RestoreProduct(id); err != nil {
+				return err
+			}
+		}
+		svc := s.withRepo(tx)
+		out, err = svc.applyProductUpdate(tx, id, in, in.IsDraft)
+		if err != nil {
+			return err
+		}
+		return tx.DeleteEditDraft(id)
+	})
+	if err == nil && out != nil {
+		s.afterProductChange("updated", out.ID, out.PublishStatus)
+	}
+	return out, err
+}
+
 func (s *ProductService) validateSkuSpecs(in *dto.ProductDTO) error {
 	if len(in.Skus) == 0 {
 		return nil
@@ -774,17 +810,17 @@ func (s *ProductService) saveSkus(tx *repo.ProductRepo, productID uint64, skus [
 			return fmt.Errorf("%w: %s", ErrDuplicateSku, code)
 		}
 		sku := &model.Sku{
-			TenantID:  s.tenantID,
-			ProductID: productID,
-			SkuCode:   code,
-			SpecData:  util.ToJSON(item.Specs),
-			SortOrder: i,
-			Price:     item.Price,
-			CostPrice: item.CostPrice,
+			TenantID:    s.tenantID,
+			ProductID:   productID,
+			SkuCode:     code,
+			SpecData:    util.ToJSON(item.Specs),
+			SortOrder:   i,
+			Price:       item.Price,
+			CostPrice:   item.CostPrice,
 			MarketPrice: item.MarketPrice,
-			Stock:     item.Stock,
-			Weight:    item.Weight,
-			Pic:       item.Pic,
+			Stock:       item.Stock,
+			Weight:      item.Weight,
+			Pic:         item.Pic,
 		}
 		if err := tx.CreateSku(sku); err != nil {
 			return err
@@ -872,13 +908,13 @@ func (s *ProductService) fromDTO(in *dto.ProductDTO) (*model.Product, error) {
 	}
 	return &model.Product{
 		TenantID: s.tenantID,
-		Name: in.Name, SubTitle: in.SubTitle,
+		Name:     in.Name, SubTitle: in.SubTitle,
 		MaterialCode: in.MaterialCode, Source: in.Source, ProductSn: in.ProductSn,
 		BrandID: in.BrandID, CategoryID: in.CategoryID, Pic: in.Pic,
 		AlbumPics: util.ToJSON(in.AlbumPics), Pics34JSON: util.ToJSON(pics34),
 		ProductVideo: productVideo,
-		MediaJSON: mediaJSON,
-		Price: in.Price, OriginalPrice: in.OriginalPrice, Stock: in.Stock,
+		MediaJSON:    mediaJSON,
+		Price:        in.Price, OriginalPrice: in.OriginalPrice, Stock: in.Stock,
 		Unit: in.Unit, Weight: in.Weight, PublishStatus: in.PublishStatus, IsDraft: in.IsDraft,
 		VerifyStatus: in.VerifyStatus, Sort: in.Sort, Description: in.Description,
 		DetailHTML: in.DetailHTML, SkuSpecsJSON: skuSpecsJSON,
@@ -906,7 +942,7 @@ func (s *ProductService) toDTO(p *model.Product, withSkus bool) (*dto.ProductDTO
 		VerifyStatus: p.VerifyStatus, Sort: p.Sort, Sale: p.Sale,
 		Description: p.Description, DetailHTML: p.DetailHTML,
 		ChannelVisible: p.ChannelVisible,
-		CreateTime: util.FormatTime(p.CreatedAt), UpdateTime: util.FormatTime(p.UpdatedAt),
+		CreateTime:     util.FormatTime(p.CreatedAt), UpdateTime: util.FormatTime(p.UpdatedAt),
 	}
 	pics34 := util.ParseStringArray(p.Pics34JSON)
 	media := dto.ParseProductMedia(p.MediaJSON)

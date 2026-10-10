@@ -164,6 +164,9 @@ func (h *DistributionHandler) GetShop(c *gin.Context) {
 //	@Security		BearerAuth
 //	@Param			id			path	int		true	"店铺 ID"
 //	@Param			keyword		query	string	false	"标题或商品 ID"
+//	@Param			collected	query	string	false	"是否采集：1 是，0 否"
+//	@Param			sortBy		query	string	false	"排序字段：sales price monthDeals monthConsign shipTime listedAt"
+//	@Param			sortOrder	query	string	false	"asc 或 desc，默认 desc"
 //	@Param			page		query	int		false	"页码"
 //	@Param			pageSize	query	int		false	"每页条数"
 //	@Success		200			{object}	response.Body
@@ -197,7 +200,7 @@ func (h *DistributionHandler) ListItems(c *gin.Context) {
 // ImportItems godoc
 //
 //	@Summary		导入铺货店铺商品
-//	@Description	上传至尊宝导出的 Excel（HTML 表格）
+//	@Description	上传至尊宝导出的 Excel（HTML 表格）。以本次表格为准整表替换：表内商品覆盖更新，表外商品删除。
 //	@Tags			admin-铺货
 //	@Accept			multipart/form-data
 //	@Produce		json

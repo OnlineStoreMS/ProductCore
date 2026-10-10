@@ -29,11 +29,14 @@ export interface DistributionItem {
   tags: string
   sourceShopName: string
   sourceShopUrl: string
+  collected: boolean
+  productId?: number
 }
 
 export interface DistributionImportResult {
   created: number
   updated: number
+  removed: number
   skipped: number
   total: number
   imageFailed: number
@@ -68,7 +71,14 @@ export async function deleteDistributionShop(id: number) {
   await client.delete(`/distribution-shops/${id}`)
 }
 
-export async function fetchDistributionItems(shopId: number, params: { keyword?: string; page?: number; pageSize?: number }) {
+export async function fetchDistributionItems(shopId: number, params: {
+  keyword?: string
+  collected?: string
+  sortBy?: string
+  sortOrder?: string
+  page?: number
+  pageSize?: number
+}) {
   const res = await client.get(`/distribution-shops/${shopId}/items`, { params })
   return unwrap<PageData<DistributionItem>>(res)
 }
