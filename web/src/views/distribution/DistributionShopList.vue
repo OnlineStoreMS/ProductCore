@@ -2,15 +2,13 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, Upload } from '@element-plus/icons-vue'
+import { Plus, Search } from '@element-plus/icons-vue'
 import { fetchEnabledPlatformTypes } from '../../api/platform'
 import {
   createDistributionShop,
   deleteDistributionShop,
   fetchDistributionShops,
-  importDistributionItems,
   updateDistributionShop,
-  type DistributionImportResult,
   type DistributionShop,
 } from '../../api/distribution'
 import type { PlatformShopType } from '../../types/platform'
@@ -31,9 +29,6 @@ const editing = ref<{ id?: number; name: string; platformTypeId?: number; remark
   name: '',
   remark: '',
 })
-const importingId = ref(0)
-const fileInput = ref<HTMLInputElement | null>(null)
-const importShop = ref<DistributionShop | null>(null)
 
 function errorText(e: unknown, fallback: string) {
   const err = e as { response?: { data?: { message?: string } }; message?: string }
@@ -142,45 +137,6 @@ async function handleDelete(row: DistributionShop) {
 function openItems(row: DistributionShop) {
   router.push(`/distribution-shops/${row.id}`)
 }
-
-function importText(result: DistributionImportResult) {
-  const parts = [`新增 ${result.created}`, `更新 ${result.updated}`]
-  if (result.removed) parts.push(`移除 ${result.removed}`)
-  if (result.imageFailed) parts.push(`图片失败 ${result.imageFailed}`)
-  return parts.join('，')
-}
-
-async function pickImport(row: DistributionShop) {
-  try {
-    await ElMessageBox.confirm('本次导入以表格为准。表里有的商品会覆盖更新，表里没有的商品会从这家店铺移除。', '导入店铺商品', {
-      type: 'warning',
-      confirmButtonText: '导入',
-    })
-  } catch {
-    return
-  }
-  importShop.value = row
-  fileInput.value?.click()
-}
-
-async function onImportFile(ev: Event) {
-  const input = ev.target as HTMLInputElement
-  const file = input.files?.[0]
-  const shop = importShop.value
-  input.value = ''
-  if (!file || !shop) return
-  importingId.value = shop.id
-  try {
-    const result = await importDistributionItems(shop.id, file)
-    ElMessage.success(`「${shop.name}」导入完成：${importText(result)}`)
-    await loadData()
-    router.push(`/distribution-shops/${shop.id}`)
-  } catch (e) {
-    ElMessage.error(errorText(e, '导入失败'))
-  } finally {
-    importingId.value = 0
-  }
-}
 </script>
 
 <template>
@@ -213,9 +169,8 @@ async function onImportFile(ev: Event) {
         </el-table-column>
         <el-table-column prop="itemCount" label="商品数" width="100" align="center" />
         <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" :icon="Upload" :loading="importingId === row.id" @click="pickImport(row)">导入商品</el-button>
             <el-button link type="primary" @click="openItems(row)">店铺商品</el-button>
             <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
             <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
@@ -253,7 +208,6 @@ async function onImportFile(ev: Event) {
         <el-button type="primary" :loading="saving" @click="handleSave">保存</el-button>
       </template>
     </el-dialog>
-    <input ref="fileInput" type="file" accept=".xls,.xlsx,.html,.htm" hidden @change="onImportFile" />
   </div>
 </template>
 
