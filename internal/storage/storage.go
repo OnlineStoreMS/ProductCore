@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+	"io"
 	"mime/multipart"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,7 @@ type Storage interface {
 	UploadPath(srcPath, originalName string, opts UploadOptions) (url string, err error)
 	ResolvePublicURL(stored string) string
 	CopyStoredToPath(stored, destPath string) error
+	Open(stored string) (io.ReadCloser, error)
 }
 
 func New(cfg *config.StorageConfig) (Storage, error) {

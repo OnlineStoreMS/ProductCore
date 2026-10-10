@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"productcore/internal/dto"
 	"productcore/internal/integrations/aimodel"
 	"productcore/internal/pkg/authcontext"
+	"productcore/internal/pkg/imagesize"
 	"productcore/internal/pkg/response"
 	"productcore/internal/storage"
 
@@ -80,10 +82,16 @@ func (h *AIImageHandler) Retouch(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 170*time.Second)
 	defer cancel()
+	size, err := retouchOutputSize(ctx, h.store, imageURL)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
 	remote, err := h.client.Retouch(ctx, aimodel.RetouchInput{
 		TenantID: authcontext.TenantID(c),
 		Prompt:   prompt,
 		ImageURL: imageURL,
+		Size:     size,
 	})
 	if err != nil {
 		response.Fail(c, http.StatusBadGateway, err.Error())
@@ -95,4 +103,38 @@ func (h *AIImageHandler) Retouch(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"url": stored})
+}
+
+func retouchOutputSize(ctx context.Context, store storage.Storage, imageURL string) (string, error) {
+	rc, err := openSourceImage(ctx, store, imageURL)
+	if err != nil {
+		return "", fmt.Errorf("无法读取原图尺寸")
+	}
+	defer rc.Close()
+	w, h, err := imagesize.FromReader(io.LimitReader(rc, 32<<20))
+	if err != nil || w <= 0 || h <= 0 {
+		return "", fmt.Errorf("无法读取原图尺寸")
+	}
+	return imagesize.QwenSize(w, h), nil
+}
+
+func openSourceImage(ctx context.Context, store storage.Storage, imageURL string) (io.ReadCloser, error) {
+	if store != nil {
+		if rc, err := store.Open(imageURL); err == nil {
+			return rc, nil
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		resp.Body.Close()
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return resp.Body, nil
 }

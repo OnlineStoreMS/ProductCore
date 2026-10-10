@@ -33,6 +33,7 @@ type RetouchInput struct {
 	TenantID uint64
 	Prompt   string
 	ImageURL string
+	Size     string
 }
 
 type retouchResponse struct {
@@ -54,6 +55,9 @@ func (c *Client) Retouch(ctx context.Context, in RetouchInput) (string, error) {
 		"model":     "qwen-image-3.0",
 		"prompt":    in.Prompt,
 		"imageUrl":  in.ImageURL,
+	}
+	if size := strings.TrimSpace(in.Size); size != "" {
+		payload["size"] = size
 	}
 	buf, err := json.Marshal(payload)
 	if err != nil {

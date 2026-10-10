@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"os"
 	"path/filepath"
@@ -153,6 +154,22 @@ func (s *MinIOStorage) publicURL(objectKey string) string {
 
 func (s *MinIOStorage) ResolvePublicURL(stored string) string {
 	return s.resolver.Resolve(stored)
+}
+
+func (s *MinIOStorage) Open(stored string) (io.ReadCloser, error) {
+	key := s.resolver.ObjectKey(strings.TrimSpace(stored))
+	if key == "" {
+		return nil, fmt.Errorf("cannot resolve object key")
+	}
+	obj, err := s.client.GetObject(context.Background(), s.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, err
+	}
+	if _, err := obj.Stat(); err != nil {
+		obj.Close()
+		return nil, err
+	}
+	return obj, nil
 }
 
 func (s *MinIOStorage) CopyStoredToPath(stored, destPath string) error {

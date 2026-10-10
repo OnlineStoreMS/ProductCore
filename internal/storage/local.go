@@ -86,6 +86,33 @@ func (s *LocalStorage) ResolvePublicURL(stored string) string {
 	return s.resolver.Resolve(stored)
 }
 
+func (s *LocalStorage) Open(stored string) (io.ReadCloser, error) {
+	key, err := s.objectKey(stored)
+	if err != nil {
+		return nil, err
+	}
+	src, err := os.Open(filepath.Join(s.baseDir, filepath.FromSlash(key)))
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", key, err)
+	}
+	return src, nil
+}
+
+func (s *LocalStorage) objectKey(stored string) (string, error) {
+	stored = strings.TrimSpace(stored)
+	if stored == "" {
+		return "", fmt.Errorf("empty stored url")
+	}
+	key := s.resolver.ObjectKey(stored)
+	if key == "" && strings.HasPrefix(stored, s.baseURL+"/") {
+		key = strings.TrimPrefix(stored, s.baseURL+"/")
+	}
+	if key == "" {
+		return "", fmt.Errorf("cannot resolve object key from %q", stored)
+	}
+	return key, nil
+}
+
 func (s *LocalStorage) CopyStoredToPath(stored, destPath string) error {
 	stored = strings.TrimSpace(stored)
 	if stored == "" {
