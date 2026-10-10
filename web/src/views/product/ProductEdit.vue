@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import ErpFormRow from '../../components/product/ErpFormRow.vue'
 import PictureCardUpload from '../../components/product/PictureCardUpload.vue'
+import BatchAiRetouchDialog from '../../components/product/BatchAiRetouchDialog.vue'
+import type { BatchRetouchSource } from '../../components/product/BatchAiRetouchDialog.vue'
 import SkuSpecEditor from '../../components/product/SkuSpecEditor.vue'
 import RichTextEditor from '../../components/product/RichTextEditor.vue'
 import {
@@ -599,6 +601,103 @@ async function handleSave() {
   await persistProduct({ finalize: true })
 }
 
+const batchOpen = ref(false)
+const batchItems = ref<BatchRetouchSource[]>([])
+
+function collectBatchImages(): BatchRetouchSource[] {
+  const items: BatchRetouchSource[] = []
+  function pushList(group: string, label: string, urls: string[], resource: UploadContext['resource']) {
+    urls.forEach((url, index) => {
+      if (!url) return
+      items.push({
+        key: `${resource}:${index}`,
+        group,
+        label: urls.filter(Boolean).length > 1 ? `${label}${index + 1}` : label,
+        url,
+        uploadContext: uploadCtx(resource),
+      })
+    })
+  }
+  pushList('商品主图', '主图', mainPicList.value, 'main')
+  pushList('3:4主图', '3:4主图', pics34.value, 'pics34')
+  pushList('素材图片', '白底图', materialWhite.value, 'material_white')
+  pushList('素材图片', '透明图', materialTransparent.value, 'material_transparent')
+  pushList('素材图片', '3:4导购图', materialGuide34.value, 'material_guide34')
+  pushList('素材图片', '宝贝长图', materialLong.value, 'material_long')
+  pushList('商品详情图', '详情图', detailPics.value, 'detail')
+  skuSpecs.value.forEach((spec, specIndex) => {
+    spec.values.forEach((value, valueIndex) => {
+      if (!value.pic) return
+      const specName = spec.name.trim() || '规格'
+      const valueName = value.value.trim() || `规格值${valueIndex + 1}`
+      items.push({
+        key: `spec:${specIndex}:${valueIndex}`,
+        group: '规格图',
+        label: `${specName}·${valueName}`,
+        url: value.pic,
+        uploadContext: uploadCtx('spec'),
+      })
+    })
+  })
+  return items
+}
+
+function openBatchRetouch() {
+  if (!productId.value) {
+    ElMessage.warning('请先保存商品后再修图')
+    return
+  }
+  const items = collectBatchImages()
+  if (!items.length) {
+    ElMessage.warning('没有可修的图片')
+    return
+  }
+  batchItems.value = items
+  batchOpen.value = true
+}
+
+function replaceIndexed(current: string[], prefix: string, ready: Map<string, string>) {
+  let changed = false
+  const next = current.map((url, index) => {
+    const hit = ready.get(`${prefix}:${index}`)
+    if (!hit) return url
+    changed = true
+    return hit
+  })
+  return changed ? next : null
+}
+
+function applyBatchReplace(replaced: { key: string; url: string }[]) {
+  const ready = new Map(replaced.map((row) => [row.key, row.url]))
+  const mainNext = replaceIndexed(mainPicList.value, 'main', ready)
+  if (mainNext) mainPicList.value = mainNext
+  const pics34Next = replaceIndexed(pics34.value, 'pics34', ready)
+  if (pics34Next) pics34.value = pics34Next
+  const whiteNext = replaceIndexed(materialWhite.value, 'material_white', ready)
+  if (whiteNext) materialWhite.value = whiteNext
+  const transparentNext = replaceIndexed(materialTransparent.value, 'material_transparent', ready)
+  if (transparentNext) materialTransparent.value = transparentNext
+  const guideNext = replaceIndexed(materialGuide34.value, 'material_guide34', ready)
+  if (guideNext) materialGuide34.value = guideNext
+  const longNext = replaceIndexed(materialLong.value, 'material_long', ready)
+  if (longNext) materialLong.value = longNext
+  const detailNext = replaceIndexed(detailPics.value, 'detail', ready)
+  if (detailNext) detailPics.value = detailNext
+
+  let specChanged = false
+  const nextSpecs = skuSpecs.value.map((spec, specIndex) => ({
+    ...spec,
+    values: spec.values.map((value, valueIndex) => {
+      const hit = ready.get(`spec:${specIndex}:${valueIndex}`)
+      if (!hit) return value
+      specChanged = true
+      return { ...value, pic: hit }
+    }),
+  }))
+  if (specChanged) skuSpecs.value = nextSpecs
+  ElMessage.success(`已替换 ${replaced.length} 张`)
+}
+
 function scrollTo(href: string) {
   activeNav.value = href
   const container = contentRef.value
@@ -741,7 +840,10 @@ function scrollTo(href: string) {
         </section>
 
         <section id="media" class="content-block">
-          <h3 class="block-title">图文信息</h3>
+          <div class="block-head">
+            <h3 class="block-title">图文信息</h3>
+            <el-button type="primary" plain @click="openBatchRetouch">批量AI修图</el-button>
+          </div>
 
           <ErpFormRow label="商品主图" required :hint="MEDIA_HINTS.main">
             <PictureCardUpload v-model="mainPicList" :max="10" sortable ai-retouch :rules="MEDIA_UPLOAD_RULES.main" :upload-context="uploadCtx('main')" />
@@ -854,6 +956,8 @@ function scrollTo(href: string) {
       </div>
     </div>
 
+    <BatchAiRetouchDialog v-model="batchOpen" :items="batchItems" @replace="applyBatchReplace" />
+
     <footer class="page-footer">
       <div v-if="isEdit" class="footer-hint">
         <span v-if="autoSaving" class="autosave-status">正在自动保存…</span>
@@ -942,6 +1046,17 @@ function scrollTo(href: string) {
   margin-top: 24px;
   padding-top: 24px;
   border-top: 1px solid #f0f0f0;
+}
+
+.block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.block-head .block-title {
+  margin-bottom: 0;
 }
 
 .block-title {
