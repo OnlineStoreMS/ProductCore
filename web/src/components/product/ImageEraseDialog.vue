@@ -476,6 +476,14 @@ function onPointerUp(ev: PointerEvent) {
   draw()
 }
 
+function replaceCurrent() {
+  const url = workingUrl.value
+  if (!url || history.value.length === 0 || busy.value) return
+  history.value = []
+  status.value = '已替换当前图，可继续左右滑'
+  emit('replace', url)
+}
+
 async function shiftImage(delta: number) {
   if (busy.value || !props.sources.length) return
   const next = props.index + delta
@@ -695,9 +703,9 @@ onBeforeUnmount(() => {
           <el-button :disabled="busy" @click="clearMarks(); draw()">清空选区</el-button>
         </div>
         <el-button type="primary" :loading="busy" @click="runErase">擦除</el-button>
-        <el-button :disabled="!canCommit" @click="emit('replace', workingUrl)">替换当前图</el-button>
+        <el-button :disabled="!canCommit" @click="replaceCurrent">替换当前图</el-button>
         <el-button :disabled="!canCommit || !canAdd" @click="emit('add', workingUrl)">添加保存</el-button>
-        <p class="hint">替换或添加后，点页面上的保存才会写进这件商品。</p>
+        <p class="hint">替换后留在这里，可以继续左右滑。点页面上的保存才会写进这件商品。</p>
       </aside>
     </div>
   </el-dialog>

@@ -279,15 +279,22 @@ function openErase(index: number) {
 function applyRetouch(url: string, mode: 'replace' | 'add') {
   if (!url) return
   const fromErase = eraseOpen.value
-  if (fromErase && props.eraseGallery && props.eraseGallery.length && mode === 'replace') {
-    emit('galleryReplace', eraseIndex.value, url)
+  if (fromErase && mode === 'replace') {
+    if (props.eraseGallery && props.eraseGallery.length) {
+      emit('galleryReplace', eraseIndex.value, url)
+    } else {
+      const next = [...list.value]
+      const index = eraseIndex.value
+      if (index < 0 || index >= next.length) return
+      next[index] = url
+      list.value = next
+    }
     ElMessage.success('已替换当前图')
-    eraseOpen.value = false
     return
   }
   if (mode === 'replace') {
     const next = [...list.value]
-    const index = fromErase ? eraseIndex.value : retouchIndex.value
+    const index = retouchIndex.value
     if (index < 0 || index >= next.length) return
     next[index] = url
     list.value = next
