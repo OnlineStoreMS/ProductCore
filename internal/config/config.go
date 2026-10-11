@@ -47,6 +47,7 @@ type IntegrationsConfig struct {
 	AgentsCenterToken  string `mapstructure:"agentscenter_internal_token"`
 	AIModelAPIURL      string `mapstructure:"aimodelcore_api_url"`
 	AIModelToken       string `mapstructure:"aimodelcore_internal_token"`
+	ImageEraseURL      string `mapstructure:"image_erase_url"`
 }
 
 type StorageConfig struct {

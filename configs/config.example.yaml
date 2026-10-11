@@ -23,6 +23,7 @@ integrations:
   agentscenter_internal_token: ""
   aimodelcore_api_url: "http://127.0.0.1:8109"
   aimodelcore_internal_token: ""
+  image_erase_url: "http://127.0.0.1:18210"
 
 storage:
   driver: minio                  # local | minio

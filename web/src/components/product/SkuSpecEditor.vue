@@ -654,6 +654,7 @@ async function removeSkuRow(row: SkuItem) {
                       :model-value="getSpecPic(si, vi)"
                       :max="1"
                       size="inline"
+                      image-erase
                       upload-label="上传规格图"
                       :rules="MEDIA_UPLOAD_RULES.skuSpec"
                       :upload-context="uploadContext"

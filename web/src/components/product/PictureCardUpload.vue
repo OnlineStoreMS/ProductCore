@@ -8,6 +8,7 @@ import type { UploadContext } from '../../api/upload'
 import type { UploadValidateRules } from '../../utils/uploadValidate'
 import { acceptFromRules, validateUploadFile } from '../../utils/uploadValidate'
 import AiRetouchDialog from './AiRetouchDialog.vue'
+import ImageEraseDialog from './ImageEraseDialog.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -22,6 +23,7 @@ const props = withDefaults(
     rules?: UploadValidateRules
     uploadContext?: UploadContext
     aiRetouch?: boolean
+    imageErase?: boolean
   }>(),
   {
     max: 10,
@@ -31,6 +33,7 @@ const props = withDefaults(
     size: 'default',
     sortable: false,
     aiRetouch: false,
+    imageErase: false,
   },
 )
 
@@ -240,8 +243,16 @@ function openVideoPreview(url: string) {
 
 const retouchOpen = ref(false)
 const retouchIndex = ref(0)
+const eraseOpen = ref(false)
+const eraseIndex = ref(0)
+const canErase = computed(() => (props.imageErase || props.aiRetouch) && props.mode === 'image')
 
 function openImagePreview(index: number) {
+  if (canErase.value && !props.aiRetouch) {
+    eraseIndex.value = index
+    eraseOpen.value = true
+    return
+  }
   if (props.aiRetouch && props.mode === 'image') {
     retouchIndex.value = index
     retouchOpen.value = true
@@ -251,11 +262,17 @@ function openImagePreview(index: number) {
   imageViewerVisible.value = true
 }
 
+function openErase(index: number) {
+  eraseIndex.value = index
+  eraseOpen.value = true
+}
+
 function applyRetouch(url: string, mode: 'replace' | 'add') {
   if (!url) return
+  const fromErase = eraseOpen.value
   if (mode === 'replace') {
     const next = [...list.value]
-    const index = retouchIndex.value
+    const index = fromErase ? eraseIndex.value : retouchIndex.value
     if (index < 0 || index >= next.length) return
     next[index] = url
     list.value = next
@@ -268,7 +285,8 @@ function applyRetouch(url: string, mode: 'replace' | 'add') {
     list.value = [...list.value, url]
     ElMessage.success('已添加为新图')
   }
-  retouchOpen.value = false
+  if (fromErase) eraseOpen.value = false
+  else retouchOpen.value = false
 }
 
 function closeImagePreview() {
@@ -339,10 +357,20 @@ function resetDrag() {
         <button
           type="button"
           class="preview-eye-btn"
+          :class="{ shifted: canErase && aiRetouch }"
           title="预览"
           @click.stop="openImagePreview(i)"
         >
           <el-icon><View /></el-icon>
+        </button>
+        <button
+          v-if="canErase && aiRetouch"
+          type="button"
+          class="preview-erase-btn"
+          title="擦除"
+          @click.stop="openErase(i)"
+        >
+          擦
         </button>
       </div>
       <button v-if="!disabled" type="button" class="remove-btn" @click.stop="removeAt(i)">×</button>
@@ -381,6 +409,16 @@ function resetDrag() {
       v-if="aiRetouch"
       v-model="retouchOpen"
       :source="list[retouchIndex] || ''"
+      :upload-context="uploadContext"
+      :can-add="list.length < max"
+      @replace="applyRetouch($event, 'replace')"
+      @add="applyRetouch($event, 'add')"
+    />
+
+    <ImageEraseDialog
+      v-if="canErase"
+      v-model="eraseOpen"
+      :source="list[eraseIndex] || ''"
       :upload-context="uploadContext"
       :can-add="list.length < max"
       @replace="applyRetouch($event, 'replace')"
@@ -575,8 +613,32 @@ function resetDrag() {
   font-size: 14px;
 }
 
-.picture-card.filled:hover .preview-eye-btn {
+.picture-card.filled:hover .preview-eye-btn,
+.picture-card.filled:hover .preview-erase-btn {
   opacity: 1;
+}
+
+.preview-eye-btn.shifted {
+  left: calc(50% - 16px);
+}
+
+.preview-erase-btn {
+  position: absolute;
+  left: calc(50% + 16px);
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(198, 40, 40, 0.82);
+  color: #fff;
+  font-size: 12px;
+  line-height: 24px;
+  cursor: pointer;
+  opacity: 0;
+  z-index: 1;
+  padding: 0;
 }
 
 .preview-eye-btn:hover {

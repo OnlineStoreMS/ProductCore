@@ -9,6 +9,7 @@ import (
 	"productcore/internal/event"
 	"productcore/internal/integrations/agentscenter"
 	"productcore/internal/integrations/aimodel"
+	"productcore/internal/integrations/imageerase"
 	jwtmgr "productcore/internal/pkg/jwt"
 	"productcore/internal/repo"
 	"productcore/internal/service"
@@ -56,7 +57,11 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 	platformTypeH := admin.NewPlatformTypeHandler(platformTypeSvc)
 	platformShopH := admin.NewPlatformShopHandler(platformShopSvc, listingSvc)
 	uploadH := admin.NewUploadHandler(store)
-	aiImageH := admin.NewAIImageHandler(aimodel.NewClient(cfg.Integrations.AIModelAPIURL, cfg.Integrations.AIModelToken), store)
+	aiImageH := admin.NewAIImageHandler(
+		aimodel.NewClient(cfg.Integrations.AIModelAPIURL, cfg.Integrations.AIModelToken),
+		imageerase.NewClient(cfg.Integrations.ImageEraseURL),
+		store,
+	)
 	collectH := admin.NewProductCollectHandler(service.NewProductCollectService(
 		repos,
 		agentscenter.NewClient(cfg.Integrations.AgentsCenterAPIURL, cfg.Integrations.AgentsCenterToken),
