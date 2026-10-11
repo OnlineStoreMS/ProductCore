@@ -118,6 +118,27 @@ function setSpecPic(si: number, vi: number, pics: string[]) {
   touchSpecs()
 }
 
+const specEraseGallery = computed(() => {
+  const values = localSpecs.value[0]?.values || []
+  const entries: { vi: number; url: string }[] = []
+  values.forEach((value, vi) => {
+    if (value.pic) entries.push({ vi, url: value.pic })
+  })
+  return entries
+})
+
+const specEraseUrls = computed(() => specEraseGallery.value.map((item) => item.url))
+
+function specEraseIndex(vi: number) {
+  return specEraseGallery.value.findIndex((item) => item.vi === vi)
+}
+
+function onSpecGalleryReplace(galleryIndex: number, url: string) {
+  const item = specEraseGallery.value[galleryIndex]
+  if (!item) return
+  setSpecPic(0, item.vi, [url])
+}
+
 function touchSpecs() {
   localSpecs.value = cloneSpecs(localSpecs.value)
 }
@@ -655,10 +676,13 @@ async function removeSkuRow(row: SkuItem) {
                       :max="1"
                       size="inline"
                       image-erase
+                      :erase-gallery="specEraseUrls"
+                      :erase-gallery-index="specEraseIndex(vi)"
                       upload-label="上传规格图"
                       :rules="MEDIA_UPLOAD_RULES.skuSpec"
                       :upload-context="uploadContext"
                       @update:model-value="setSpecPic(si, vi, $event)"
+                      @gallery-replace="onSpecGalleryReplace"
                     />
                     <button
                       v-if="spec.values.length > 1"

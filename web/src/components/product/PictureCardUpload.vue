@@ -24,6 +24,8 @@ const props = withDefaults(
     uploadContext?: UploadContext
     aiRetouch?: boolean
     imageErase?: boolean
+    eraseGallery?: string[]
+    eraseGalleryIndex?: number
   }>(),
   {
     max: 10,
@@ -34,11 +36,13 @@ const props = withDefaults(
     sortable: false,
     aiRetouch: false,
     imageErase: false,
+    eraseGalleryIndex: 0,
   },
 )
 
 const emit = defineEmits<{
   'update:modelValue': [value: string[]]
+  galleryReplace: [index: number, url: string]
 }>()
 
 const list = computed({
@@ -246,11 +250,11 @@ const retouchIndex = ref(0)
 const eraseOpen = ref(false)
 const eraseIndex = ref(0)
 const canErase = computed(() => (props.imageErase || props.aiRetouch) && props.mode === 'image')
+const dialogSources = computed(() => (props.eraseGallery && props.eraseGallery.length ? props.eraseGallery : list.value))
 
 function openImagePreview(index: number) {
   if (canErase.value && !props.aiRetouch) {
-    eraseIndex.value = index
-    eraseOpen.value = true
+    openErase(index)
     return
   }
   if (props.aiRetouch && props.mode === 'image') {
@@ -263,13 +267,24 @@ function openImagePreview(index: number) {
 }
 
 function openErase(index: number) {
-  eraseIndex.value = index
+  if (props.eraseGallery && props.eraseGallery.length) {
+    const start = props.eraseGalleryIndex ?? 0
+    eraseIndex.value = start >= 0 ? start : 0
+  } else {
+    eraseIndex.value = index
+  }
   eraseOpen.value = true
 }
 
 function applyRetouch(url: string, mode: 'replace' | 'add') {
   if (!url) return
   const fromErase = eraseOpen.value
+  if (fromErase && props.eraseGallery && props.eraseGallery.length && mode === 'replace') {
+    emit('galleryReplace', eraseIndex.value, url)
+    ElMessage.success('已替换当前图')
+    eraseOpen.value = false
+    return
+  }
   if (mode === 'replace') {
     const next = [...list.value]
     const index = fromErase ? eraseIndex.value : retouchIndex.value
@@ -358,7 +373,7 @@ function resetDrag() {
           type="button"
           class="preview-eye-btn"
           :class="{ shifted: canErase && aiRetouch }"
-          title="预览"
+          :title="canErase && !aiRetouch ? '擦除' : '预览'"
           @click.stop="openImagePreview(i)"
         >
           <el-icon><View /></el-icon>
@@ -418,9 +433,11 @@ function resetDrag() {
     <ImageEraseDialog
       v-if="canErase"
       v-model="eraseOpen"
-      :source="list[eraseIndex] || ''"
+      :sources="dialogSources"
+      :index="eraseIndex"
       :upload-context="uploadContext"
       :can-add="list.length < max"
+      @update:index="eraseIndex = $event"
       @replace="applyRetouch($event, 'replace')"
       @add="applyRetouch($event, 'add')"
     />
