@@ -37,6 +37,10 @@ const skus = ref<SkuItem[]>([])
 const keyword = ref('')
 const batchPrice = ref<number>()
 const batchStock = ref<number>()
+const specFind = ref('')
+const specReplaceTo = ref('')
+const specReplaceColumn = ref<string>()
+const priceAdjust = ref('')
 const csvInputRef = ref<HTMLInputElement>()
 const importing = ref(false)
 
@@ -152,6 +156,10 @@ async function loadProduct() {
   keyword.value = ''
   batchPrice.value = undefined
   batchStock.value = undefined
+  specFind.value = ''
+  specReplaceTo.value = ''
+  specReplaceColumn.value = undefined
+  priceAdjust.value = ''
   try {
     const p = await fetchProductSkus(props.productId)
     product.value = p
@@ -190,6 +198,177 @@ async function handleSave() {
   } finally {
     saving.value = false
   }
+}
+
+function replaceLiteral(text: string, find: string, repl: string) {
+  return text.split(find).join(repl)
+}
+
+function roundMoney(value: number) {
+  const rounded = Math.round(value)
+  return rounded < 0 ? 0 : rounded
+}
+
+function parsePriceAdjust(raw: string): ((price: number) => number) | null {
+  const text = raw
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/＋/g, '+')
+    .replace(/－/g, '-')
+    .replace(/[×＊]/g, '*')
+    .replace(/％/g, '%')
+  const add = text.match(/^\+([0-9]+(?:\.[0-9]+)?)$/)
+  if (add) return (price) => roundMoney(price + Number(add[1]))
+  const sub = text.match(/^-([0-9]+(?:\.[0-9]+)?)$/)
+  if (sub) return (price) => roundMoney(price - Number(sub[1]))
+  const percent = text.match(/^\*([0-9]+(?:\.[0-9]+)?)%$/)
+  if (percent) return (price) => roundMoney((price * Number(percent[1])) / 100)
+  const mul = text.match(/^\*([0-9]+(?:\.[0-9]+)?)$/)
+  if (mul) return (price) => roundMoney(price * Number(mul[1]))
+  return null
+}
+
+function rebuildSpecCatalog(
+  columns: string[],
+  origin: Map<string, Map<string, string>>,
+) {
+  if (!product.value) return
+  const specs: SkuSpec[] = JSON.parse(JSON.stringify(product.value.skuSpecs || []))
+  for (const name of columns) {
+    let spec = specs.find((item) => item.name.trim() === name)
+    if (!spec) {
+      spec = { name, values: [] }
+      specs.push(spec)
+    }
+    const oldEntries = spec.values || []
+    const used: string[] = []
+    const seen = new Set<string>()
+    for (const sku of skus.value) {
+      const value = (sku.specs?.[name] || '').trim()
+      if (!value || seen.has(value)) continue
+      seen.add(value)
+      used.push(value)
+    }
+    const usedSet = new Set(used)
+    const fromOld = origin.get(name)
+    const ordered: string[] = []
+    const placed = new Set<string>()
+    for (const entry of oldEntries) {
+      if (usedSet.has(entry.value)) {
+        ordered.push(entry.value)
+        placed.add(entry.value)
+        continue
+      }
+      for (const value of used) {
+        if (fromOld?.get(value) === entry.value && !placed.has(value)) {
+          ordered.push(value)
+          placed.add(value)
+        }
+      }
+    }
+    for (const value of used) {
+      if (!placed.has(value)) ordered.push(value)
+    }
+    spec.values = ordered.map((value) => {
+      const exact = oldEntries.find((entry) => entry.value === value)
+      if (exact) return { ...exact }
+      const previous = fromOld?.get(value)
+      const source = previous ? oldEntries.find((entry) => entry.value === previous) : undefined
+      if (source) return { ...source, value }
+      return { value }
+    })
+  }
+  product.value.skuSpecs = specs
+}
+
+function applySpecReplace() {
+  const find = specFind.value
+  if (!find) {
+    ElMessage.warning('请填写要查找的内容')
+    return
+  }
+  const targets = filteredSkus.value
+  if (!targets.length) {
+    ElMessage.info('没有可替换的 SKU')
+    return
+  }
+  const columns = specReplaceColumn.value ? [specReplaceColumn.value] : specColumns.value
+  if (!columns.length) {
+    ElMessage.info('没有规格值可替换')
+    return
+  }
+  const repl = specReplaceTo.value
+  const targetSet = new Set(targets)
+  const origin = new Map<string, Map<string, string>>()
+  let changed = 0
+  let emptySpec = ''
+  const nextSpecs = skus.value.map((sku) => {
+    const specs = { ...(sku.specs || {}) }
+    if (!targetSet.has(sku) || emptySpec) return specs
+    let touched = false
+    for (const name of columns) {
+      const old = specs[name] ?? ''
+      if (!old.includes(find)) continue
+      const next = replaceLiteral(old, find, repl).trim()
+      if (!next) {
+        emptySpec = name
+        return specs
+      }
+      if (next !== old) {
+        let mapped = origin.get(name)
+        if (!mapped) {
+          mapped = new Map()
+          origin.set(name, mapped)
+        }
+        if (!mapped.has(next)) mapped.set(next, old)
+        specs[name] = next
+        touched = true
+      }
+    }
+    if (touched) changed++
+    return specs
+  })
+  if (emptySpec) {
+    ElMessage.warning(`规格「${emptySpec}」替换后不能为空`)
+    return
+  }
+  if (!changed) {
+    ElMessage.info('没有匹配到要替换的内容')
+    return
+  }
+  const seen = new Set<string>()
+  for (const specs of nextSpecs) {
+    const key = specColumns.value.map((name) => specs[name] ?? '').join('\u0001')
+    if (seen.has(key)) {
+      ElMessage.warning('替换后会出现相同规格的 SKU，已取消')
+      return
+    }
+    seen.add(key)
+  }
+  skus.value = skus.value.map((sku, index) => ({ ...sku, specs: nextSpecs[index] }))
+  rebuildSpecCatalog(columns, origin)
+  const scope = keyword.value.trim() ? '当前筛选中 ' : ''
+  ElMessage.success(`已更新 ${scope}${changed} 条 SKU 的规格值，请确认后保存`)
+}
+
+function applyPriceAdjust() {
+  const op = parsePriceAdjust(priceAdjust.value)
+  if (!op) {
+    ElMessage.warning('销售价请按 +5、-5 或 *120% 填写')
+    return
+  }
+  const targets = filteredSkus.value
+  if (!targets.length) {
+    ElMessage.info('没有可调整的 SKU')
+    return
+  }
+  const targetSet = new Set(targets)
+  skus.value = skus.value.map((sku) => {
+    if (!targetSet.has(sku)) return sku
+    return { ...sku, price: op(Number(sku.price) || 0) }
+  })
+  const scope = keyword.value.trim() ? '当前筛选中 ' : ''
+  ElMessage.success(`已调整 ${scope}${targets.length} 条销售价，请确认后保存`)
 }
 
 function applyBatch() {
@@ -365,6 +544,23 @@ watch(
         <el-button type="primary" class="batch-btn" @click="applyBatch">
           批量填充{{ keyword.trim() ? '（当前筛选）' : '' }}
         </el-button>
+        <el-input v-model="priceAdjust" placeholder="+5、-5、*120%" class="batch-input batch-input--op" />
+        <el-button type="primary" class="batch-btn" @click="applyPriceAdjust">
+          调整销售价{{ keyword.trim() ? '（当前筛选）' : '' }}
+        </el-button>
+      </div>
+
+      <div v-if="skus.length && specColumns.length" class="batch-bar">
+        <span class="batch-label">规格替换</span>
+        <el-select v-model="specReplaceColumn" clearable placeholder="全部规格" class="batch-select">
+          <el-option v-for="name in specColumns" :key="name" :label="name" :value="name" />
+        </el-select>
+        <el-input v-model="specFind" placeholder="查找，如（" class="batch-input batch-input--text" />
+        <span class="batch-label">替换为</span>
+        <el-input v-model="specReplaceTo" placeholder="如 -，留空即删除" class="batch-input batch-input--text" />
+        <el-button type="primary" class="batch-btn" @click="applySpecReplace">
+          替换{{ keyword.trim() ? '（当前筛选）' : '' }}
+        </el-button>
       </div>
 
       <div v-if="skus.length" class="sku-table-wrap">
@@ -440,7 +636,7 @@ watch(
       <el-empty v-else-if="!loading" description="暂无 SKU" :image-size="64" />
 
       <p v-if="productId" class="foot-hint">
-        修改规格、编码等请
+        规格值和销售价调整后请点保存。修改规格名、编码请
         <router-link :to="`/products/${productId}/edit`" target="_blank">前往商品编辑</router-link>
       </p>
     </div>
@@ -525,6 +721,7 @@ watch(
 .batch-bar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 10px;
   padding: 8px 10px;
@@ -532,8 +729,26 @@ watch(
   border-radius: 4px;
 }
 
+.batch-label {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: #606266;
+}
+
 .batch-input {
   width: 108px;
+}
+
+.batch-input--text {
+  width: 148px;
+}
+
+.batch-input--op {
+  width: 132px;
+}
+
+.batch-select {
+  width: 120px;
 }
 
 .batch-btn {
