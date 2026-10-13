@@ -39,6 +39,7 @@ const menuItems: MenuEntry[] = [
     icon: Shop,
     children: [
       { path: '/distribution-shops', title: '铺货店铺', icon: Grid },
+      { path: '/distribution-configs', title: '铺货配置', icon: Setting },
     ],
   },
   {

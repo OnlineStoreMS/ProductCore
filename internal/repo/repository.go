@@ -4,29 +4,33 @@ import "gorm.io/gorm"
 
 // Repos 聚合数据访问层（对应 TECH_STACK internal/repo）
 type Repos struct {
-	Product         *ProductRepo
-	Brand           *BrandRepo
-	Category        *CategoryRepo
-	Group           *GroupRepo
-	Keyword         *KeywordRepo
-	PlatformType    *PlatformTypeRepo
-	PlatformShop    *PlatformShopRepo
-	PlatformListing *PlatformListingRepo
-	ProductCollect  *ProductCollectRepo
-	Distribution    *DistributionRepo
+	Product            *ProductRepo
+	Brand              *BrandRepo
+	Category           *CategoryRepo
+	Group              *GroupRepo
+	Keyword            *KeywordRepo
+	PlatformType       *PlatformTypeRepo
+	PlatformShop       *PlatformShopRepo
+	PlatformListing    *PlatformListingRepo
+	ProductCollect     *ProductCollectRepo
+	Distribution       *DistributionRepo
+	DistributionConfig *DistributionConfigRepo
+	ProductPublish     *ProductPublishRepo
 }
 
 func New(db *gorm.DB) *Repos {
 	return &Repos{
-		Product:         NewProductRepo(db),
-		Brand:           NewBrandRepo(db),
-		Category:        NewCategoryRepo(db),
-		Group:           NewGroupRepo(db),
-		Keyword:         NewKeywordRepo(db),
-		PlatformType:    NewPlatformTypeRepo(db),
-		PlatformShop:    NewPlatformShopRepo(db),
-		PlatformListing: NewPlatformListingRepo(db),
-		ProductCollect:  NewProductCollectRepo(db),
-		Distribution:    NewDistributionRepo(db),
+		Product:            NewProductRepo(db),
+		Brand:              NewBrandRepo(db),
+		Category:           NewCategoryRepo(db),
+		Group:              NewGroupRepo(db),
+		Keyword:            NewKeywordRepo(db),
+		PlatformType:       NewPlatformTypeRepo(db),
+		PlatformShop:       NewPlatformShopRepo(db),
+		PlatformListing:    NewPlatformListingRepo(db),
+		ProductCollect:     NewProductCollectRepo(db),
+		Distribution:       NewDistributionRepo(db),
+		DistributionConfig: NewDistributionConfigRepo(db),
+		ProductPublish:     NewProductPublishRepo(db),
 	}
 }

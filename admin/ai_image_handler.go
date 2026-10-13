@@ -110,6 +110,16 @@ func (h *AIImageHandler) Retouch(c *gin.Context) {
 	response.OK(c, gin.H{"url": stored})
 }
 
+// Snap godoc
+//
+//	@Summary		图片擦除区域识别
+//	@Tags			admin-图片
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		dto.ImageEraseRequest	true	"原图与选区"
+//	@Success		200		{object}	response.Body
+//	@Router			/admin/ai/images/erase/snap [post]
 func (h *AIImageHandler) Snap(c *gin.Context) {
 	if h.erase == nil {
 		response.Fail(c, http.StatusServiceUnavailable, "未配置图片擦除")
@@ -140,6 +150,16 @@ func (h *AIImageHandler) Snap(c *gin.Context) {
 	response.OK(c, regions)
 }
 
+// Erase godoc
+//
+//	@Summary		图片擦除
+//	@Tags			admin-图片
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		dto.ImageEraseRequest	true	"原图与选区"
+//	@Success		200		{object}	response.Body
+//	@Router			/admin/ai/images/erase [post]
 func (h *AIImageHandler) Erase(c *gin.Context) {
 	if h.erase == nil {
 		response.Fail(c, http.StatusServiceUnavailable, "未配置图片擦除")

@@ -31,9 +31,13 @@ func (s *ProductService) SuperSearch(q dto.SuperSearchQuery) ([]dto.SuperSearchI
 		productIDs = append(productIDs, row.ProductID)
 	}
 
-	shopMap, err := s.meta.PlatformListing.ShopsByProductIDs(productIDs)
+	publishRows, err := s.meta.ProductPublish.WithTenant(s.tenantID).ListByProductIDs(productIDs)
 	if err != nil {
 		return nil, 0, err
+	}
+	shopMap := make(map[uint64][]dto.ListedShopDTO, len(productIDs))
+	for _, row := range publishRows {
+		shopMap[row.ProductID] = append(shopMap[row.ProductID], toListedShop(row))
 	}
 
 	out := make([]dto.SuperSearchItemDTO, 0, len(rows))

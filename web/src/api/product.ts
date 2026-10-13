@@ -119,6 +119,43 @@ export async function updateProductListings(id: number, shopIds: number[]) {
   return unwrap<ListedShop[]>(res)
 }
 
+export interface PublishShop {
+  id: number
+  agentId: number
+  agentName: string
+  platform: string
+  platformShopId: string
+  platformShopName: string
+  agentOnline: boolean
+  publishReady: boolean
+  reason?: string
+  publishStatus?: string
+}
+
+export interface PublishShopList {
+  list: PublishShop[]
+  hint?: string
+}
+
+export interface StartPublishResult {
+  id: number
+  shopName: string
+  platform: string
+  platformTypeName: string
+  publishStatus: string
+  agentJobId: number
+}
+
+export async function fetchPublishShops(productId?: number) {
+  const res = await client.get('/publish-shops', { params: productId ? { productId } : {} })
+  return unwrap<PublishShopList>(res)
+}
+
+export async function startProductPublish(id: number, body: { platform: string; platformShopId: string }) {
+  const res = await client.post(`/products/${id}/publish`, body)
+  return unwrap<StartPublishResult>(res)
+}
+
 export async function discardEditDraft(id: number) {
   await client.delete(`/products/${id}/edit-draft`)
 }

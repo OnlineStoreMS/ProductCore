@@ -227,3 +227,109 @@ func (h *DistributionHandler) ImportItems(c *gin.Context) {
 	}
 	response.OK(c, result)
 }
+
+// ConfigMeta godoc
+//
+//	@Summary		铺货配置可选项
+//	@Tags			admin-铺货
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	response.Body
+//	@Router			/admin/distribution-configs/meta [get]
+func (h *DistributionHandler) ConfigMeta(c *gin.Context) {
+	response.OK(c, h.forTenant(c).ConfigMeta())
+}
+
+// ListConfigs godoc
+//
+//	@Summary		铺货配置列表
+//	@Description	按电商平台查看发货模式、现货发货时间、运费模板和售后政策。当前铺货执行仍使用店铺页面默认值。
+//	@Tags			admin-铺货
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	response.Body
+//	@Router			/admin/distribution-configs [get]
+func (h *DistributionHandler) ListConfigs(c *gin.Context) {
+	list, err := h.forTenant(c).ListConfigs()
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, list)
+}
+
+// CreateConfig godoc
+//
+//	@Summary		新增铺货配置
+//	@Tags			admin-铺货
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		dto.DistributionConfigDTO	true	"配置"
+//	@Success		201		{object}	response.Body
+//	@Router			/admin/distribution-configs [post]
+func (h *DistributionHandler) CreateConfig(c *gin.Context) {
+	var in dto.DistributionConfigDTO
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, "请填写铺货配置")
+		return
+	}
+	item, err := h.forTenant(c).CreateConfig(&in)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.Created(c, item)
+}
+
+// UpdateConfig godoc
+//
+//	@Summary		更新铺货配置
+//	@Tags			admin-铺货
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		int							true	"配置 ID"
+//	@Param			body	body		dto.DistributionConfigDTO	true	"配置"
+//	@Success		200		{object}	response.Body
+//	@Router			/admin/distribution-configs/{id} [put]
+func (h *DistributionHandler) UpdateConfig(c *gin.Context) {
+	id, err := httputil.ParseID(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var in dto.DistributionConfigDTO
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, "请填写铺货配置")
+		return
+	}
+	item, err := h.forTenant(c).UpdateConfig(id, &in)
+	if err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, item)
+}
+
+// DeleteConfig godoc
+//
+//	@Summary		删除铺货配置
+//	@Tags			admin-铺货
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		int	true	"配置 ID"
+//	@Success		200	{object}	response.Body
+//	@Router			/admin/distribution-configs/{id} [delete]
+func (h *DistributionHandler) DeleteConfig(c *gin.Context) {
+	id, err := httputil.ParseID(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if err := h.forTenant(c).DeleteConfig(id); err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, nil)
+}

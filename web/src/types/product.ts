@@ -101,6 +101,8 @@ export interface ListedShop {
   platformTypeName?: string
   platformTypeLogo?: string
   sourceChannel?: string
+  publishStatus?: string
+  errorMessage?: string
 }
 
 export interface Product {

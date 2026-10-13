@@ -334,3 +334,182 @@ func itemDTO(item *model.DistributionShopItem) dto.DistributionItemDTO {
 		SourceShopURL:  item.SourceShopURL,
 	}
 }
+
+func (s *DistributionService) configs() *repo.DistributionConfigRepo {
+	return s.repos.DistributionConfig.WithTenant(s.tenantID)
+}
+
+func (s *DistributionService) ConfigMeta() dto.DistributionConfigMeta {
+	return dto.DistributionConfigOptions()
+}
+
+func (s *DistributionService) ListConfigs() ([]dto.DistributionConfigDTO, error) {
+	rows, err := s.configs().List()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dto.DistributionConfigDTO, 0, len(rows))
+	for i := range rows {
+		out = append(out, s.configDTO(&rows[i]))
+	}
+	return out, nil
+}
+
+func (s *DistributionService) CreateConfig(in *dto.DistributionConfigDTO) (*dto.DistributionConfigDTO, error) {
+	row, err := s.newConfig(in)
+	if err != nil {
+		return nil, err
+	}
+	existing, err := s.configs().FindByPlatform(row.PlatformTypeID)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if existing != nil {
+		return nil, configErr("该平台已有铺货配置", ErrDuplicateDistributionConfig)
+	}
+	if err := s.configs().Create(row); err != nil {
+		return nil, err
+	}
+	d := s.configDTO(row)
+	return &d, nil
+}
+
+func (s *DistributionService) UpdateConfig(id uint64, in *dto.DistributionConfigDTO) (*dto.DistributionConfigDTO, error) {
+	row, err := s.configs().Get(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	next, err := s.newConfig(in)
+	if err != nil {
+		return nil, err
+	}
+	existing, err := s.configs().FindByPlatform(next.PlatformTypeID)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if existing != nil && existing.ID != id {
+		return nil, configErr("该平台已有铺货配置", ErrDuplicateDistributionConfig)
+	}
+	row.PlatformTypeID = next.PlatformTypeID
+	row.ShipMode = next.ShipMode
+	row.SpotShipTime = next.SpotShipTime
+	row.FreightTemplate = next.FreightTemplate
+	row.AfterSalePolicy = next.AfterSalePolicy
+	row.Enabled = next.Enabled
+	row.Remark = next.Remark
+	if err := s.configs().Save(row); err != nil {
+		return nil, err
+	}
+	d := s.configDTO(row)
+	return &d, nil
+}
+
+func (s *DistributionService) DeleteConfig(id uint64) error {
+	if _, err := s.configs().Get(id); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNotFound
+		}
+		return err
+	}
+	return s.configs().Delete(id)
+}
+
+func (s *DistributionService) newConfig(in *dto.DistributionConfigDTO) (*model.DistributionPublishConfig, error) {
+	if in.PlatformTypeID == 0 {
+		return nil, configErr("请选择电商平台", ErrInvalidDistributionConfig)
+	}
+	pt, err := s.repos.PlatformType.GetByID(in.PlatformTypeID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, configErr("电商平台不存在", ErrInvalidDistributionConfig)
+		}
+		return nil, err
+	}
+	if pt.Enabled == 0 {
+		return nil, configErr("该电商平台已停用", ErrInvalidDistributionConfig)
+	}
+	meta := dto.DistributionConfigOptions()
+	shipMode := strings.TrimSpace(in.ShipMode)
+	spotTime := strings.TrimSpace(in.SpotShipTime)
+	afterSale := strings.TrimSpace(in.AfterSalePolicy)
+	if !hasOption(meta.ShipModes, shipMode) {
+		return nil, configErr("请选择发货模式", ErrInvalidDistributionConfig)
+	}
+	if !hasOption(meta.SpotShipTimes, spotTime) {
+		return nil, configErr("请选择现货发货时间", ErrInvalidDistributionConfig)
+	}
+	if !hasOption(meta.AfterSalePolicies, afterSale) {
+		return nil, configErr("请选择售后政策", ErrInvalidDistributionConfig)
+	}
+	freight := strings.TrimSpace(in.FreightTemplate)
+	if len([]rune(freight)) > 128 {
+		return nil, configErr("运费模板名称过长", ErrInvalidDistributionConfig)
+	}
+	remark := strings.TrimSpace(in.Remark)
+	if len([]rune(remark)) > 256 {
+		return nil, configErr("备注过长", ErrInvalidDistributionConfig)
+	}
+	enabled := in.Enabled
+	if enabled != 0 {
+		enabled = 1
+	}
+	return &model.DistributionPublishConfig{
+		PlatformTypeID:  in.PlatformTypeID,
+		ShipMode:        shipMode,
+		SpotShipTime:    spotTime,
+		FreightTemplate: freight,
+		AfterSalePolicy: afterSale,
+		Enabled:         enabled,
+		Remark:          remark,
+	}, nil
+}
+
+func (s *DistributionService) configDTO(row *model.DistributionPublishConfig) dto.DistributionConfigDTO {
+	meta := dto.DistributionConfigOptions()
+	out := dto.DistributionConfigDTO{
+		ID:                   row.ID,
+		PlatformTypeID:       row.PlatformTypeID,
+		ShipMode:             row.ShipMode,
+		ShipModeLabel:        dto.DistributionConfigLabel(meta.ShipModes, row.ShipMode),
+		SpotShipTime:         row.SpotShipTime,
+		SpotShipTimeLabel:    dto.DistributionConfigLabel(meta.SpotShipTimes, row.SpotShipTime),
+		FreightTemplate:      row.FreightTemplate,
+		AfterSalePolicy:      row.AfterSalePolicy,
+		AfterSalePolicyLabel: dto.DistributionConfigLabel(meta.AfterSalePolicies, row.AfterSalePolicy),
+		Enabled:              row.Enabled,
+		Remark:               row.Remark,
+	}
+	if pt, err := s.repos.PlatformType.GetByID(row.PlatformTypeID); err == nil && pt != nil {
+		out.PlatformTypeCode = pt.Code
+		out.PlatformTypeName = pt.Name
+	}
+	return out
+}
+
+func hasOption(options []dto.DistributionConfigOption, value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, opt := range options {
+		if opt.Value == value {
+			return true
+		}
+	}
+	return false
+}
+
+type distributionConfigError struct {
+	msg string
+	err error
+}
+
+func (e *distributionConfigError) Error() string { return e.msg }
+
+func (e *distributionConfigError) Unwrap() error { return e.err }
+
+func configErr(msg string, err error) error {
+	return &distributionConfigError{msg: msg, err: err}
+}

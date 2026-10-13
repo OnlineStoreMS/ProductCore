@@ -17,10 +17,11 @@ import (
 type ProductHandler struct {
 	svc        *service.ProductService
 	listingSvc *service.PlatformListingService
+	publishSvc *service.ProductPublishService
 }
 
-func NewProductHandler(svc *service.ProductService, listingSvc *service.PlatformListingService) *ProductHandler {
-	return &ProductHandler{svc: svc, listingSvc: listingSvc}
+func NewProductHandler(svc *service.ProductService, listingSvc *service.PlatformListingService, publishSvc *service.ProductPublishService) *ProductHandler {
+	return &ProductHandler{svc: svc, listingSvc: listingSvc, publishSvc: publishSvc}
 }
 
 func (h *ProductHandler) ps(c *gin.Context) *service.ProductService {
@@ -29,6 +30,10 @@ func (h *ProductHandler) ps(c *gin.Context) *service.ProductService {
 
 func (h *ProductHandler) ls(c *gin.Context) *service.PlatformListingService {
 	return h.listingSvc.ForTenant(authcontext.TenantID(c))
+}
+
+func (h *ProductHandler) pub(c *gin.Context) *service.ProductPublishService {
+	return h.publishSvc.ForTenant(authcontext.TenantID(c))
 }
 
 // List godoc
@@ -60,7 +65,8 @@ func (h *ProductHandler) List(c *gin.Context) {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := h.ls(c).AttachListedShops(list); err != nil {
+	h.pub(c).Sync()
+	if err := h.pub(c).AttachListedShops(list); err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -89,6 +95,7 @@ func (h *ProductHandler) SuperSearch(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "请输入搜索关键字")
 		return
 	}
+	h.pub(c).Sync()
 	list, total, err := h.ps(c).SuperSearch(q)
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, err.Error())

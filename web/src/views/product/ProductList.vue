@@ -6,7 +6,7 @@ import { Search, Edit, Delete, View, Upload, Download, CopyDocument } from '@ele
 import ProductDetailDrawer from '../../components/product/ProductDetailDrawer.vue'
 import ProductImportDialog from '../../components/product/ProductImportDialog.vue'
 import ProductSkuManageDialog from '../../components/product/ProductSkuManageDialog.vue'
-import ProductListingDialog from '../../components/product/ProductListingDialog.vue'
+import ProductPublishDialog from '../../components/product/ProductPublishDialog.vue'
 import {
   deleteProduct,
   fetchBrands,
@@ -197,18 +197,33 @@ const listingVisible = ref(false)
 const listingProductId = ref<number>()
 const listingProductName = ref('')
 
-function handleManageListing(row: Product) {
+function handlePublish(row: Product) {
   listingProductId.value = row.id
   listingProductName.value = row.name
   listingVisible.value = true
 }
 
-function onListingSaved(productId: number, shops: ListedShop[]) {
-  const row = tableData.value.find((r) => r.id === productId)
-  if (row) {
-    row.listedShops = shops
-    row.listedShopCount = shops.length
+function onPublishStarted(payload: {
+  productId: number
+  shopId: number
+  shopName: string
+  platformTypeName: string
+  publishStatus: string
+}) {
+  const row = tableData.value.find((r) => r.id === payload.productId)
+  if (!row) return
+  const shops = [...(row.listedShops || [])]
+  const idx = shops.findIndex((s) => s.shopName === payload.shopName && s.platformTypeName === payload.platformTypeName)
+  const next: ListedShop = {
+    shopId: payload.shopId,
+    shopName: payload.shopName,
+    platformTypeName: payload.platformTypeName,
+    publishStatus: payload.publishStatus,
   }
+  if (idx >= 0) shops[idx] = next
+  else shops.push(next)
+  row.listedShops = shops
+  row.listedShopCount = shops.length
 }
 </script>
 
@@ -309,26 +324,22 @@ function onListingSaved(productId: number, shops: ListedShop[]) {
         </el-table-column>
         <el-table-column label="已铺货店铺" min-width="180">
           <template #default="{ row }">
-            <div class="listing-cell" @click="handleManageListing(row)">
+            <div class="listing-cell">
               <template v-if="row.listedShops?.length">
                 <div
                   v-for="shop in row.listedShops"
                   :key="shop.shopId"
                   class="shop-row"
                 >
-                  <el-image
-                    v-if="shop.platformTypeLogo"
-                    :src="shop.platformTypeLogo"
-                    class="type-logo"
-                    fit="cover"
-                  />
-                  <span v-else class="type-logo type-logo--text">
+                  <span class="type-logo type-logo--text">
                     {{ shop.platformTypeName?.slice(0, 1) || shop.shopName?.slice(0, 1) || '?' }}
                   </span>
-                  <span class="shop-name" :title="shop.shopName">{{ shop.shopName }}</span>
+                  <span class="shop-name" :title="shop.errorMessage || shop.shopName">{{ shop.shopName }}</span>
+                  <span v-if="shop.publishStatus === 'running'" class="shop-state shop-state--run">铺货中</span>
+                  <span v-else-if="shop.publishStatus === 'failed'" class="shop-state shop-state--fail">失败</span>
                 </div>
               </template>
-              <el-button v-else link type="primary" class="listing-btn">绑定店铺</el-button>
+              <span v-else class="shop-empty">未铺货</span>
             </div>
           </template>
         </el-table-column>
@@ -338,11 +349,12 @@ function onListingSaved(productId: number, shops: ListedShop[]) {
             <el-switch :model-value="!!row.publishStatus" @change="togglePublish(row)" />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="300" fixed="right">
+        <el-table-column label="操作" width="360" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link :icon="View" @click="handleView(row)">查看</el-button>
             <el-button type="primary" link :icon="Edit" @click="handleEdit(row)">编辑</el-button>
             <el-button type="primary" link :icon="CopyDocument" :loading="copyingId === row.id" @click="handleCopy(row)">复制</el-button>
+            <el-button type="primary" link @click="handlePublish(row)">铺货</el-button>
             <el-button
               type="primary"
               link
@@ -386,11 +398,11 @@ function onListingSaved(productId: number, shops: ListedShop[]) {
       :product-name="skuManageProductName"
       @saved="onSkuSaved"
     />
-    <ProductListingDialog
+    <ProductPublishDialog
       v-model="listingVisible"
       :product-id="listingProductId"
       :product-name="listingProductName"
-      @saved="onListingSaved"
+      @started="onPublishStarted"
     />
   </div>
 </template>
@@ -460,7 +472,6 @@ function onListingSaved(productId: number, shops: ListedShop[]) {
 }
 
 .listing-cell {
-  cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -501,13 +512,22 @@ function onListingSaved(productId: number, shops: ListedShop[]) {
   min-width: 0;
 }
 
-.listing-cell:hover .shop-name {
-  color: var(--el-color-primary);
+.shop-state {
+  flex-shrink: 0;
+  font-size: 12px;
 }
 
-.listing-btn {
-  padding: 0;
-  min-height: auto;
+.shop-state--run {
+  color: #e6a23c;
+}
+
+.shop-state--fail {
+  color: #f56c6c;
+}
+
+.shop-empty {
+  color: #909399;
+  font-size: 13px;
 }
 
 .pagination {

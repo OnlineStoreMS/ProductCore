@@ -46,7 +46,9 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 	platformShopSvc := service.NewPlatformShopService(repos)
 	listingSvc := service.NewPlatformListingService(repos, productSvc)
 
-	productH := admin.NewProductHandler(productSvc, listingSvc)
+	agentsClient := agentscenter.NewClient(cfg.Integrations.AgentsCenterAPIURL, cfg.Integrations.AgentsCenterToken)
+	publishSvc := service.NewProductPublishService(repos, productSvc, agentsClient)
+	productH := admin.NewProductHandler(productSvc, listingSvc, publishSvc)
 	importSvc := service.NewProductImportService(productSvc, store)
 	exportSvc := service.NewProductExportService(productSvc, store)
 	importH := admin.NewProductImportHandler(importSvc, exportSvc)
@@ -64,7 +66,7 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 	)
 	collectH := admin.NewProductCollectHandler(service.NewProductCollectService(
 		repos,
-		agentscenter.NewClient(cfg.Integrations.AgentsCenterAPIURL, cfg.Integrations.AgentsCenterToken),
+		agentsClient,
 		productSvc,
 	))
 	distributionH := admin.NewDistributionHandler(service.NewDistributionService(repos, store))

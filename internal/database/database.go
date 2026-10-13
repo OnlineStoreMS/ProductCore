@@ -55,6 +55,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&model.ProductCollectTask{},
 		&model.DistributionShop{},
 		&model.DistributionShopItem{},
+		&model.DistributionPublishConfig{},
+		&model.ProductPublish{},
 	); err != nil {
 		return err
 	}

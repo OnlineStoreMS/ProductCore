@@ -83,6 +83,57 @@ export async function fetchDistributionItems(shopId: number, params: {
   return unwrap<PageData<DistributionItem>>(res)
 }
 
+export interface DistributionConfigOption {
+  value: string
+  label: string
+}
+
+export interface DistributionConfigMeta {
+  shipModes: DistributionConfigOption[]
+  spotShipTimes: DistributionConfigOption[]
+  afterSalePolicies: DistributionConfigOption[]
+}
+
+export interface DistributionConfig {
+  id?: number
+  platformTypeId: number
+  platformTypeCode?: string
+  platformTypeName?: string
+  shipMode: string
+  shipModeLabel?: string
+  spotShipTime: string
+  spotShipTimeLabel?: string
+  freightTemplate: string
+  afterSalePolicy: string
+  afterSalePolicyLabel?: string
+  enabled: number
+  remark: string
+}
+
+export async function fetchDistributionConfigMeta() {
+  const res = await client.get('/distribution-configs/meta')
+  return unwrap<DistributionConfigMeta>(res)
+}
+
+export async function fetchDistributionConfigs() {
+  const res = await client.get('/distribution-configs')
+  return unwrap<DistributionConfig[]>(res)
+}
+
+export async function createDistributionConfig(data: DistributionConfig) {
+  const res = await client.post('/distribution-configs', data)
+  return unwrap<DistributionConfig>(res)
+}
+
+export async function updateDistributionConfig(id: number, data: DistributionConfig) {
+  const res = await client.put(`/distribution-configs/${id}`, data)
+  return unwrap<DistributionConfig>(res)
+}
+
+export async function deleteDistributionConfig(id: number) {
+  await client.delete(`/distribution-configs/${id}`)
+}
+
 export async function importDistributionItems(shopId: number, file: File) {
   const form = new FormData()
   form.append('file', file)

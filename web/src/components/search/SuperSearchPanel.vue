@@ -6,8 +6,7 @@ import { superSearch } from '../../api/search'
 import type { SuperSearchItem } from '../../types/search'
 import ProductDetailDrawer from '../product/ProductDetailDrawer.vue'
 import ProductSkuManageDialog from '../product/ProductSkuManageDialog.vue'
-import ProductListingDialog from '../product/ProductListingDialog.vue'
-import type { ListedShop } from '../../types/product'
+import ProductPublishDialog from '../product/ProductPublishDialog.vue'
 
 const keyword = ref('')
 const panelOpen = ref(false)
@@ -97,7 +96,7 @@ function openListing(item: SuperSearchItem) {
   panelOpen.value = false
 }
 
-function onListingSaved(_productId: number, _shops: ListedShop[]) {
+function onPublishStarted() {
   if (keyword.value.trim()) {
     void runSearch(false)
   }
@@ -187,6 +186,8 @@ onUnmounted(() => {
                       fit="cover"
                     />
                     {{ shop.shopName }}
+                    <template v-if="shop.publishStatus === 'running'"> 铺货中</template>
+                    <template v-else-if="shop.publishStatus === 'failed'"> 失败</template>
                   </span>
                   <span v-if="item.listedShopCount > 4" class="shop-more">
                     +{{ item.listedShopCount - 4 }}
@@ -230,11 +231,11 @@ onUnmounted(() => {
       :product-id="skuManageProductId"
       :product-name="skuManageProductName"
     />
-    <ProductListingDialog
+    <ProductPublishDialog
       v-model="listingVisible"
       :product-id="listingProductId"
       :product-name="listingProductName"
-      @saved="onListingSaved"
+      @started="onPublishStarted"
     />
   </div>
 </template>

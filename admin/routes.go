@@ -29,6 +29,8 @@ func RegisterRoutes(
 	g.GET("/products/:id", productH.Get)
 	g.POST("/products", productH.Create)
 	g.POST("/products/:id/copy", productH.Copy)
+	g.GET("/publish-shops", productH.ListPublishShops)
+	g.POST("/products/:id/publish", productH.StartPublish)
 	g.POST("/products/draft", productH.CreateDraft)
 	g.POST("/products/import", importH.Import)
 	g.GET("/products/:id/export", importH.Export)
@@ -99,4 +101,10 @@ func RegisterRoutes(
 	g.DELETE("/distribution-shops/:id", distributionH.DeleteShop)
 	g.GET("/distribution-shops/:id/items", distributionH.ListItems)
 	g.POST("/distribution-shops/:id/items/import", distributionH.ImportItems)
+
+	g.GET("/distribution-configs/meta", distributionH.ConfigMeta)
+	g.GET("/distribution-configs", distributionH.ListConfigs)
+	g.POST("/distribution-configs", distributionH.CreateConfig)
+	g.PUT("/distribution-configs/:id", distributionH.UpdateConfig)
+	g.DELETE("/distribution-configs/:id", distributionH.DeleteConfig)
 }

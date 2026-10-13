@@ -65,7 +65,9 @@ func HandleServiceError(c *gin.Context, err error) {
 		errors.Is(err, service.ErrBuiltinPlatformType),
 		errors.Is(err, service.ErrTypeHasShops),
 		errors.Is(err, service.ErrUnsupportedProductURL),
-		errors.Is(err, service.ErrCollectEmpty):
+		errors.Is(err, service.ErrCollectEmpty),
+		errors.Is(err, service.ErrInvalidDistributionConfig),
+		errors.Is(err, service.ErrDuplicateDistributionConfig):
 		response.Fail(c, http.StatusBadRequest, err.Error())
 	default:
 		if err.Error() == "category has children" {

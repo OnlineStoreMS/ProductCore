@@ -6,6 +6,8 @@ type ListedShopDTO struct {
 	PlatformTypeName string `json:"platformTypeName,omitempty"`
 	PlatformTypeLogo string `json:"platformTypeLogo,omitempty"`
 	SourceChannel    string `json:"sourceChannel,omitempty"`
+	PublishStatus    string `json:"publishStatus,omitempty"` // running/succeeded/failed
+	ErrorMessage     string `json:"errorMessage,omitempty"`
 }
 
 type UpdateProductListingsRequest struct {
