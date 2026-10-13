@@ -63,6 +63,9 @@ func (s *ProductPublishService) ListShops(productID uint64) (*dto.PublishShopLis
 		out.Hint = "没有在线的电商店铺。请确认 WindowsAgent 已登录店铺并保持在线。"
 		return out, nil
 	}
+	// 同一抖店可能挂在多台在线电脑上。列表只保留一条，优先已勾选铺货的那台。
+	chosen := map[string]dto.PublishShopDTO{}
+	order := make([]string, 0, len(shops))
 	for _, sh := range shops {
 		item := dto.PublishShopDTO{
 			ID:               sh.ID,
@@ -79,7 +82,19 @@ func (s *ProductPublishService) ListShops(productID uint64) (*dto.PublishShopLis
 		ready, reason := shopPublishReady(sh)
 		item.PublishReady = ready
 		item.Reason = reason
-		out.List = append(out.List, item)
+		key := sh.Platform + "|" + sh.PlatformShopID
+		prev, ok := chosen[key]
+		if !ok {
+			chosen[key] = item
+			order = append(order, key)
+			continue
+		}
+		if !prev.PublishReady && item.PublishReady {
+			chosen[key] = item
+		}
+	}
+	for _, key := range order {
+		out.List = append(out.List, chosen[key])
 	}
 	if !anyReady(out.List) {
 		out.Hint = "在线店铺都还不能铺货。请在 WindowsAgent 电商店铺里勾选「商品铺货」，等心跳上报后再试。"
@@ -101,16 +116,24 @@ func (s *ProductPublishService) Start(productID uint64, platform, platformShopID
 		return nil, err
 	}
 	var shop *agentscenter.ShopItem
+	reason := ""
 	for i := range shops {
-		if shops[i].Platform == platform && shops[i].PlatformShopID == platformShopID {
+		if shops[i].Platform != platform || shops[i].PlatformShopID != platformShopID {
+			continue
+		}
+		ready, why := shopPublishReady(shops[i])
+		if ready {
 			shop = &shops[i]
 			break
 		}
+		if reason == "" {
+			reason = why
+		}
 	}
-	if shop == nil {
+	if shop == nil && reason == "" {
 		return nil, errors.New("店铺不在线，或还没有从 WindowsAgent 上报")
 	}
-	if ready, reason := shopPublishReady(*shop); !ready {
+	if shop == nil {
 		return nil, errors.New(reason)
 	}
 
@@ -344,20 +367,20 @@ func platformProductID(raw string) string {
 }
 
 type publishParams struct {
-	Platform          string           `json:"platform"`
-	PlatformShopID    string           `json:"platformShopId"`
-	PlatformShopName  string           `json:"platformShopName"`
-	ProductID         uint64           `json:"productId"`
-	Title             string           `json:"title"`
-	CategoryKeyword   string           `json:"categoryKeyword"`
-	CategoryPathHint  string           `json:"categoryPathHint"`
-	Brand             string           `json:"brand"`
-	CategoryAttrName  string           `json:"categoryAttrName,omitempty"`
-	CategoryAttrValue string           `json:"categoryAttrValue,omitempty"`
-	SpecName          string           `json:"specName"`
-	MainImages        []string         `json:"mainImages"`
-	DetailImages      []string         `json:"detailImages"`
-	Skus              []publishSku     `json:"skus"`
+	Platform          string       `json:"platform"`
+	PlatformShopID    string       `json:"platformShopId"`
+	PlatformShopName  string       `json:"platformShopName"`
+	ProductID         uint64       `json:"productId"`
+	Title             string       `json:"title"`
+	CategoryKeyword   string       `json:"categoryKeyword"`
+	CategoryPathHint  string       `json:"categoryPathHint"`
+	Brand             string       `json:"brand"`
+	CategoryAttrName  string       `json:"categoryAttrName,omitempty"`
+	CategoryAttrValue string       `json:"categoryAttrValue,omitempty"`
+	SpecName          string       `json:"specName"`
+	MainImages        []string     `json:"mainImages"`
+	DetailImages      []string     `json:"detailImages"`
+	Skus              []publishSku `json:"skus"`
 }
 
 type publishSku struct {

@@ -57,6 +57,10 @@ client.interceptors.response.use(
       clearToken()
       redirectToPortal()
     }
+    const message = err.response?.data?.message
+    if (typeof message === 'string' && message.trim()) {
+      err.message = message
+    }
     return Promise.reject(err)
   },
 )
