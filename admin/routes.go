@@ -31,6 +31,7 @@ func RegisterRoutes(
 	g.POST("/products/:id/copy", productH.Copy)
 	g.GET("/publish-shops", productH.ListPublishShops)
 	g.POST("/products/:id/publish", productH.StartPublish)
+	g.POST("/products/:id/publish-update", productH.StartPublishUpdate)
 	g.POST("/products/draft", productH.CreateDraft)
 	g.POST("/products/import", importH.Import)
 	g.GET("/products/:id/export", importH.Export)

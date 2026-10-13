@@ -130,6 +130,7 @@ export interface PublishShop {
   publishReady: boolean
   reason?: string
   publishStatus?: string
+  platformProductId?: string
 }
 
 export interface PublishShopList {
@@ -153,6 +154,14 @@ export async function fetchPublishShops(productId?: number) {
 
 export async function startProductPublish(id: number, body: { platform: string; platformShopId: string }) {
   const res = await client.post(`/products/${id}/publish`, body)
+  return unwrap<StartPublishResult>(res)
+}
+
+export async function startProductPublishUpdate(
+  id: number,
+  body: { platform: string; platformShopId: string; platformProductId: string },
+) {
+  const res = await client.post(`/products/${id}/publish-update`, body)
   return unwrap<StartPublishResult>(res)
 }
 

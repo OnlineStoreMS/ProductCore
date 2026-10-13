@@ -7,6 +7,7 @@ import ProductDetailDrawer from '../../components/product/ProductDetailDrawer.vu
 import ProductImportDialog from '../../components/product/ProductImportDialog.vue'
 import ProductSkuManageDialog from '../../components/product/ProductSkuManageDialog.vue'
 import ProductPublishDialog from '../../components/product/ProductPublishDialog.vue'
+import ProductUpdateDialog from '../../components/product/ProductUpdateDialog.vue'
 import {
   deleteProduct,
   fetchBrands,
@@ -203,6 +204,14 @@ function handlePublish(row: Product) {
   listingVisible.value = true
 }
 
+const updateVisible = ref(false)
+
+function handleUpdatePublish(row: Product) {
+  listingProductId.value = row.id
+  listingProductName.value = row.name
+  updateVisible.value = true
+}
+
 function onPublishStarted(payload: {
   productId: number
   shopId: number
@@ -349,12 +358,13 @@ function onPublishStarted(payload: {
             <el-switch :model-value="!!row.publishStatus" @change="togglePublish(row)" />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="360" fixed="right">
+        <el-table-column label="操作" width="430" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link :icon="View" @click="handleView(row)">查看</el-button>
             <el-button type="primary" link :icon="Edit" @click="handleEdit(row)">编辑</el-button>
             <el-button type="primary" link :icon="CopyDocument" :loading="copyingId === row.id" @click="handleCopy(row)">复制</el-button>
             <el-button type="primary" link @click="handlePublish(row)">铺货</el-button>
+            <el-button type="primary" link @click="handleUpdatePublish(row)">更新铺货</el-button>
             <el-button
               type="primary"
               link
@@ -400,6 +410,12 @@ function onPublishStarted(payload: {
     />
     <ProductPublishDialog
       v-model="listingVisible"
+      :product-id="listingProductId"
+      :product-name="listingProductName"
+      @started="onPublishStarted"
+    />
+    <ProductUpdateDialog
+      v-model="updateVisible"
       :product-id="listingProductId"
       :product-name="listingProductName"
       @started="onPublishStarted"

@@ -1,16 +1,17 @@
 package dto
 
 type PublishShopDTO struct {
-	ID               uint64 `json:"id"`
-	AgentID          uint64 `json:"agentId"`
-	AgentName        string `json:"agentName"`
-	Platform         string `json:"platform"`
-	PlatformShopID   string `json:"platformShopId"`
-	PlatformShopName string `json:"platformShopName"`
-	AgentOnline      bool   `json:"agentOnline"`
-	PublishReady     bool   `json:"publishReady"`
-	Reason           string `json:"reason,omitempty"`
-	PublishStatus    string `json:"publishStatus,omitempty"`
+	ID                uint64 `json:"id"`
+	AgentID           uint64 `json:"agentId"`
+	AgentName         string `json:"agentName"`
+	Platform          string `json:"platform"`
+	PlatformShopID    string `json:"platformShopId"`
+	PlatformShopName  string `json:"platformShopName"`
+	AgentOnline       bool   `json:"agentOnline"`
+	PublishReady      bool   `json:"publishReady"`
+	Reason            string `json:"reason,omitempty"`
+	PublishStatus     string `json:"publishStatus,omitempty"`
+	PlatformProductID string `json:"platformProductId,omitempty"`
 }
 
 type PublishShopListDTO struct {
@@ -21,6 +22,12 @@ type PublishShopListDTO struct {
 type StartPublishRequest struct {
 	Platform       string `json:"platform" binding:"required"`
 	PlatformShopID string `json:"platformShopId" binding:"required"`
+}
+
+type StartPublishUpdateRequest struct {
+	Platform          string `json:"platform" binding:"required"`
+	PlatformShopID    string `json:"platformShopId" binding:"required"`
+	PlatformProductID string `json:"platformProductId" binding:"required"`
 }
 
 type StartPublishResult struct {

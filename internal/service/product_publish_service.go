@@ -13,6 +13,7 @@ import (
 )
 
 const publishJobType = "doudian.product.publish"
+const updateJobType = "doudian.product.update"
 
 type ProductPublishService struct {
 	repo       *repo.ProductPublishRepo
@@ -80,6 +81,7 @@ func (s *ProductPublishService) ListShops(productID uint64) (*dto.PublishShopLis
 		}
 		if row, ok := current[sh.Platform+"|"+sh.PlatformShopID]; ok {
 			item.PublishStatus = row.Status
+			item.PlatformProductID = row.PlatformProductID
 		}
 		ready, reason := shopPublishReady(sh)
 		item.PublishReady = ready
@@ -205,6 +207,126 @@ func (s *ProductPublishService) Start(productID uint64, platform, platformShopID
 		PublishStatus:    row.Status,
 		AgentJobID:       row.AgentJobID,
 	}, nil
+}
+
+func (s *ProductPublishService) StartUpdate(productID uint64, platform, platformShopID, platformProductID string) (*dto.StartPublishResult, error) {
+	platform = strings.TrimSpace(platform)
+	platformShopID = strings.TrimSpace(platformShopID)
+	platformProductID = strings.TrimSpace(platformProductID)
+	if platform == "" || platformShopID == "" {
+		return nil, errors.New("请选择店铺")
+	}
+	if !validPlatformProductID(platformProductID) {
+		return nil, errors.New("请输入店铺里的商品 ID")
+	}
+	if s.agents == nil {
+		return nil, errors.New("未配置 AgentsCenter")
+	}
+	shops, err := s.agents.ListShops(s.tenantID)
+	if err != nil {
+		return nil, err
+	}
+	var shop *agentscenter.ShopItem
+	reason := ""
+	for i := range shops {
+		if shops[i].Platform != platform || shops[i].PlatformShopID != platformShopID {
+			continue
+		}
+		ready, why := shopPublishReady(shops[i])
+		if ready {
+			shop = &shops[i]
+			break
+		}
+		if reason == "" {
+			reason = why
+		}
+	}
+	if shop == nil && reason == "" {
+		return nil, errors.New("店铺不在线，或还没有从 WindowsAgent 上报")
+	}
+	if shop == nil {
+		return nil, errors.New(reason)
+	}
+
+	existing, err := s.repo.Get(productID, platform, platformShopID)
+	if err != nil && !repo.IsPublishNotFound(err) {
+		return nil, err
+	}
+	if existing != nil && existing.Status == "running" && existing.AgentJobID > 0 {
+		_ = s.syncRows([]model.ProductPublish{*existing})
+		existing, err = s.repo.Get(productID, platform, platformShopID)
+		if err != nil {
+			return nil, err
+		}
+		if existing.Status == "running" {
+			return nil, errors.New("该店铺正在铺货，请等本次结束")
+		}
+	}
+
+	product, err := s.productSvc.Get(productID)
+	if err != nil {
+		return nil, err
+	}
+	params, err := buildPublishParams(product, shop, s.categoryPath(product.CategoryID))
+	if err != nil {
+		return nil, err
+	}
+	params.PlatformProductID = platformProductID
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return nil, err
+	}
+	job, err := s.agents.CreateJob(agentscenter.CreateJobRequest{
+		TenantID:         s.tenantID,
+		JobType:          updateJobType,
+		Platform:         shop.Platform,
+		PlatformShopID:   shop.PlatformShopID,
+		PlatformShopName: shop.PlatformShopName,
+		ParamsJSON:       string(raw),
+		Source:           "product",
+		Priority:         50,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	row := &model.ProductPublish{
+		ProductID:         productID,
+		Platform:          shop.Platform,
+		PlatformShopID:    shop.PlatformShopID,
+		PlatformShopName:  shop.PlatformShopName,
+		AgentID:           shop.AgentID,
+		AgentJobID:        job.ID,
+		Status:            "running",
+		PlatformProductID: platformProductID,
+		ErrorMessage:      "",
+	}
+	if existing != nil {
+		row.ID = existing.ID
+	}
+	if err := s.repo.Save(row); err != nil {
+		return nil, err
+	}
+	return &dto.StartPublishResult{
+		ID:               row.ID,
+		ShopName:         row.PlatformShopName,
+		Platform:         row.Platform,
+		PlatformTypeName: platformLabel(row.Platform),
+		PublishStatus:    row.Status,
+		AgentJobID:       row.AgentJobID,
+	}, nil
+}
+
+func validPlatformProductID(id string) bool {
+	if len(id) < 6 || len(id) > 32 {
+		return false
+	}
+	for _, r := range id {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *ProductPublishService) Sync() {
@@ -384,6 +506,7 @@ type publishParams struct {
 	MainImages        []string     `json:"mainImages"`
 	DetailImages      []string     `json:"detailImages"`
 	Skus              []publishSku `json:"skus"`
+	PlatformProductID string       `json:"platformProductId,omitempty"`
 }
 
 type publishSku struct {

@@ -7,6 +7,7 @@ import type { SuperSearchItem } from '../../types/search'
 import ProductDetailDrawer from '../product/ProductDetailDrawer.vue'
 import ProductSkuManageDialog from '../product/ProductSkuManageDialog.vue'
 import ProductPublishDialog from '../product/ProductPublishDialog.vue'
+import ProductUpdateDialog from '../product/ProductUpdateDialog.vue'
 
 const keyword = ref('')
 const panelOpen = ref(false)
@@ -93,6 +94,15 @@ function openListing(item: SuperSearchItem) {
   listingProductId.value = item.productId
   listingProductName.value = item.productName
   listingVisible.value = true
+  panelOpen.value = false
+}
+
+const updateVisible = ref(false)
+
+function openUpdate(item: SuperSearchItem) {
+  listingProductId.value = item.productId
+  listingProductName.value = item.productName
+  updateVisible.value = true
   panelOpen.value = false
 }
 
@@ -206,6 +216,7 @@ onUnmounted(() => {
                 <el-button type="primary" link @click="openDetail(item)">查看</el-button>
                 <el-button type="primary" link @click="openSkuManage(item)">SKU</el-button>
                 <el-button type="primary" link @click="openListing(item)">铺货</el-button>
+                <el-button type="primary" link @click="openUpdate(item)">更新铺货</el-button>
               </div>
             </div>
           </div>
@@ -233,6 +244,12 @@ onUnmounted(() => {
     />
     <ProductPublishDialog
       v-model="listingVisible"
+      :product-id="listingProductId"
+      :product-name="listingProductName"
+      @started="onPublishStarted"
+    />
+    <ProductUpdateDialog
+      v-model="updateVisible"
       :product-id="listingProductId"
       :product-name="listingProductName"
       @started="onPublishStarted"

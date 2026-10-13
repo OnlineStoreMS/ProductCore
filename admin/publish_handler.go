@@ -76,3 +76,39 @@ func (h *ProductHandler) StartPublish(c *gin.Context) {
 	}
 	response.OK(c, item)
 }
+
+// StartPublishUpdate godoc
+//
+//	@Summary		更新铺货
+//	@Description	按店铺中已有的商品 ID 覆盖该商品，下发到电商店铺所在的 WindowsAgent
+//	@Tags			admin-商品
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id		path		int								true	"商品 ID"
+//	@Param			body	body		dto.StartPublishUpdateRequest	true	"店铺和平台商品 ID"
+//	@Success		200		{object}	response.Body
+//	@Failure		400		{object}	response.Body
+//	@Router			/admin/products/{id}/publish-update [post]
+func (h *ProductHandler) StartPublishUpdate(c *gin.Context) {
+	id, err := httputil.ParseID(c)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, "invalid id")
+		return
+	}
+	var in dto.StartPublishUpdateRequest
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, "请选择店铺并填写商品 ID")
+		return
+	}
+	item, err := h.pub(c).StartUpdate(id, in.Platform, in.PlatformShopID, in.PlatformProductID)
+	if err != nil {
+		if errors.Is(err, service.ErrNotFound) {
+			response.Fail(c, http.StatusNotFound, "商品不存在")
+			return
+		}
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, item)
+}
