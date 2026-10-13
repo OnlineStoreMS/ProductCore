@@ -16,6 +16,7 @@ const publishJobType = "doudian.product.publish"
 
 type ProductPublishService struct {
 	repo       *repo.ProductPublishRepo
+	categories *repo.CategoryRepo
 	productSvc *ProductService
 	agents     *agentscenter.Client
 	tenantID   uint64
@@ -24,6 +25,7 @@ type ProductPublishService struct {
 func NewProductPublishService(repos *repo.Repos, productSvc *ProductService, agents *agentscenter.Client) *ProductPublishService {
 	return &ProductPublishService{
 		repo:       repos.ProductPublish,
+		categories: repos.Category,
 		productSvc: productSvc,
 		agents:     agents,
 		tenantID:   1,
@@ -156,7 +158,7 @@ func (s *ProductPublishService) Start(productID uint64, platform, platformShopID
 	if err != nil {
 		return nil, err
 	}
-	params, err := buildPublishParams(product, shop)
+	params, err := buildPublishParams(product, shop, s.categoryPath(product.CategoryID))
 	if err != nil {
 		return nil, err
 	}
@@ -372,6 +374,7 @@ type publishParams struct {
 	PlatformShopName  string       `json:"platformShopName"`
 	ProductID         uint64       `json:"productId"`
 	Title             string       `json:"title"`
+	CategoryPath      []string     `json:"categoryPath,omitempty"`
 	CategoryKeyword   string       `json:"categoryKeyword"`
 	CategoryPathHint  string       `json:"categoryPathHint"`
 	Brand             string       `json:"brand"`
@@ -390,7 +393,32 @@ type publishSku struct {
 	Pic   string `json:"pic,omitempty"`
 }
 
-func buildPublishParams(p *dto.ProductDTO, shop *agentscenter.ShopItem) (*publishParams, error) {
+func (s *ProductPublishService) categoryPath(categoryID uint64) []string {
+	if s.categories == nil || categoryID == 0 {
+		return nil
+	}
+	var names []string
+	seen := map[uint64]struct{}{}
+	id := categoryID
+	for id > 0 {
+		if _, ok := seen[id]; ok {
+			break
+		}
+		seen[id] = struct{}{}
+		cat, err := s.categories.GetByID(s.tenantID, id)
+		if err != nil || cat == nil {
+			break
+		}
+		name := strings.TrimSpace(cat.Name)
+		if name != "" && name != "无分类" {
+			names = append([]string{name}, names...)
+		}
+		id = cat.ParentID
+	}
+	return names
+}
+
+func buildPublishParams(p *dto.ProductDTO, shop *agentscenter.ShopItem, path []string) (*publishParams, error) {
 	title := trimDouyinTitle(strings.TrimSpace(p.Name), 60)
 	if title == "" {
 		return nil, errors.New("商品标题为空")
@@ -438,9 +466,16 @@ func buildPublishParams(p *dto.ProductDTO, shop *agentscenter.ShopItem) (*publis
 		return nil, errors.New("商品没有可用的规格值")
 	}
 	category := strings.TrimSpace(p.CategoryName)
+	if len(path) > 0 {
+		category = path[len(path)-1]
+	}
 	keyword := category
 	if i := strings.IndexAny(category, "/／"); i > 0 {
 		keyword = strings.TrimSpace(category[:i])
+	}
+	hint := category
+	if len(path) > 0 {
+		hint = strings.Join(path, " > ")
 	}
 	params := &publishParams{
 		Platform:         shop.Platform,
@@ -448,8 +483,9 @@ func buildPublishParams(p *dto.ProductDTO, shop *agentscenter.ShopItem) (*publis
 		PlatformShopName: shop.PlatformShopName,
 		ProductID:        p.ID,
 		Title:            title,
+		CategoryPath:     path,
 		CategoryKeyword:  keyword,
-		CategoryPathHint: category,
+		CategoryPathHint: hint,
 		Brand:            "无品牌",
 		SpecName:         specName,
 		MainImages:       mains,
