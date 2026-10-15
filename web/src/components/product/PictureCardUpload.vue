@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Plus, VideoCamera, View, Picture, FolderOpened } from '@element-plus/icons-vue'
+import { Plus, VideoCamera, View, Picture, FolderOpened, Upload } from '@element-plus/icons-vue'
 import { ElImageViewer, ElMessage } from 'element-plus'
 import type { UploadFile, UploadInstance, UploadRequestOptions, UploadUserFile } from 'element-plus'
 import { uploadImage, uploadImagesBatch, uploadVideo } from '../../api/upload'
@@ -260,6 +260,17 @@ const canMaterialPick = computed(
 )
 const materialSlots = computed(() => Math.max(0, props.max - list.value.length))
 const dialogSources = computed(() => (props.eraseGallery && props.eraseGallery.length ? props.eraseGallery : list.value))
+const showAddSlot = computed(() => list.value.length < props.max && !props.disabled)
+
+function triggerLocalUpload() {
+  const root = uploadRef.value?.$el as HTMLElement | undefined
+  const input = root?.querySelector('input[type="file"]') as HTMLInputElement | null
+  input?.click()
+}
+
+function openMaterialPick() {
+  materialOpen.value = true
+}
 
 function onMaterialConfirm(urls: string[]) {
   if (!urls.length) return
@@ -416,8 +427,47 @@ function resetDrag() {
       </div>
       <button v-if="!disabled" type="button" class="remove-btn" @click.stop="removeAt(i)">×</button>
     </div>
+    <!-- 图片 + 素材库：悬浮弹出「本地上传 / 图库上传」 -->
+    <div
+      v-if="showAddSlot && canMaterialPick"
+      class="add-slot with-menu"
+      :class="sizeClass"
+    >
+      <div class="picture-card add" :title="uploadLabel">
+        <el-icon class="upload-icon">
+          <Picture v-if="size === 'inline'" />
+          <Plus v-else />
+        </el-icon>
+        <span class="upload-text">{{ uploadLabel }}</span>
+      </div>
+      <div class="upload-menu">
+        <button type="button" class="upload-menu-item" @click.stop="triggerLocalUpload">
+          <el-icon><Upload /></el-icon>
+          <span>本地上传</span>
+        </button>
+        <button type="button" class="upload-menu-item" @click.stop="openMaterialPick">
+          <el-icon><FolderOpened /></el-icon>
+          <span>图库上传</span>
+        </button>
+      </div>
+      <el-upload
+        ref="uploadRef"
+        :show-file-list="false"
+        :auto-upload="!useBatchUpload"
+        :http-request="useBatchUpload ? undefined : handleUpload"
+        :accept="effectiveAccept"
+        :multiple="canSelectMultiple"
+        :disabled="batchUploading"
+        class="upload-hidden"
+        @change="handleFileChange"
+      >
+        <span class="upload-proxy" />
+      </el-upload>
+    </div>
+
+    <!-- 视频或关闭素材库：直接本地上传 -->
     <el-upload
-      v-if="list.length < max && !disabled"
+      v-else-if="showAddSlot"
       ref="uploadRef"
       :show-file-list="false"
       :auto-upload="!useBatchUpload"
@@ -437,17 +487,6 @@ function resetDrag() {
         <span class="upload-text">{{ uploadLabel }}</span>
       </div>
     </el-upload>
-    <button
-      v-if="canMaterialPick"
-      type="button"
-      class="picture-card add material-pick"
-      :class="sizeClass"
-      title="从素材中心选取"
-      @click="materialOpen = true"
-    >
-      <el-icon class="upload-icon"><FolderOpened /></el-icon>
-      <span class="upload-text">{{ size === 'inline' ? '素材' : '素材库' }}</span>
-    </button>
 
     <el-image-viewer
       v-if="imageViewerVisible"
@@ -574,16 +613,84 @@ function resetDrag() {
   height: 32px;
 }
 
-.picture-card.add.material-pick {
-  border-style: solid;
-  border-color: #c6e2ff;
-  background: #f0f7ff;
-  color: #409eff;
-  cursor: pointer;
+.add-slot.with-menu {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  z-index: 2;
 }
-.picture-card-upload.inline .picture-card.add.material-pick .upload-text {
+
+.picture-card-upload.small .add-slot.with-menu {
+  width: 52px;
+  height: 52px;
+}
+
+.picture-card-upload.inline .add-slot.with-menu {
+  width: 32px;
+  height: 32px;
+}
+
+.upload-menu {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 4px);
+  transform: translateX(-50%);
   display: none;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 118px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  z-index: 30;
 }
+
+.upload-menu::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 10px;
+}
+
+.add-slot.with-menu:hover .upload-menu,
+.add-slot.with-menu:focus-within .upload-menu {
+  display: flex;
+}
+
+.upload-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: #303133;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.upload-menu-item:hover {
+  background: #f5f7fa;
+  color: #ff7700;
+}
+
+.upload-hidden {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .picture-card.add {
   position: relative;
   display: flex;
@@ -603,11 +710,16 @@ function resetDrag() {
   pointer-events: none;
 }
 
+.add-slot.with-menu .picture-card.add {
+  pointer-events: auto;
+}
+
 .picture-card-upload.small .picture-card.add {
   gap: 0;
 }
 
-.picture-card.add:hover {
+.picture-card.add:hover,
+.add-slot.with-menu:hover .picture-card.add {
   border-color: #ff7700;
   color: #ff7700;
 }
