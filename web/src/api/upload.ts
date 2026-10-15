@@ -78,6 +78,41 @@ export async function uploadImageFromUrl(sourceUrl: string, ctx?: UploadContext)
   return data.url
 }
 
+export interface ImageAdaptParams {
+  url: string
+  aspectW?: number
+  aspectH?: number
+  cropX?: number
+  cropY?: number
+  cropW?: number
+  cropH?: number
+  maxEdge?: number
+  detailMaxW?: number
+  detailMaxH?: number
+  quality?: number
+  preferPng?: boolean
+}
+
+/** 从素材 URL 下载并按商品场景裁剪/压缩后入库 */
+export async function uploadImageFromUrlAdapt(
+  params: ImageAdaptParams,
+  ctx?: UploadContext,
+): Promise<string> {
+  const res = await client.post(
+    '/upload/from-url-adapt',
+    {
+      ...params,
+      scope: ctx?.scope,
+      resource: ctx?.resource,
+      productId: ctx?.productId,
+      skuId: ctx?.skuId,
+    },
+    { timeout: 180000 },
+  )
+  const data = unwrap<{ url: string }>(res)
+  return data.url
+}
+
 export async function uploadVideo(file: File, ctx?: UploadContext): Promise<string> {
   const form = new FormData()
   form.append('file', file)

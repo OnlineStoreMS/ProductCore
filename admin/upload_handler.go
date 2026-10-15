@@ -195,6 +195,25 @@ type uploadFromURLBody struct {
 	SkuID     uint64 `json:"skuId"`
 }
 
+type uploadFromURLAdaptBody struct {
+	URL        string  `json:"url" binding:"required"`
+	Scope      string  `json:"scope"`
+	Resource   string  `json:"resource"`
+	ProductID  uint64  `json:"productId"`
+	SkuID      uint64  `json:"skuId"`
+	AspectW    int     `json:"aspectW"`
+	AspectH    int     `json:"aspectH"`
+	CropX      float64 `json:"cropX"`
+	CropY      float64 `json:"cropY"`
+	CropW      float64 `json:"cropW"`
+	CropH      float64 `json:"cropH"`
+	MaxEdge    int     `json:"maxEdge"`
+	DetailMaxW int     `json:"detailMaxW"`
+	DetailMaxH int     `json:"detailMaxH"`
+	Quality    int     `json:"quality"`
+	PreferPNG  bool    `json:"preferPng"`
+}
+
 // UploadFromURL godoc
 //
 //	@Summary		从 URL 上传图片
@@ -224,6 +243,55 @@ func (h *UploadHandler) UploadFromURL(c *gin.Context) {
 		return
 	}
 	url, err := storage.UploadFromURL(h.store, body.URL, opts)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"url": url})
+}
+
+// UploadFromURLAdapt godoc
+//
+//	@Summary		从素材 URL 适配上传
+//	@Description	下载远程图片，按商品场景裁剪比例并压缩后写入存储（素材中心选取）
+//	@Tags			admin-上传
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		uploadFromURLAdaptBody	true	"远程图片与裁剪压缩参数"
+//	@Success		200		{object}	response.UploadURLResp
+//	@Failure		400		{object}	response.Body
+//	@Router			/admin/upload/from-url-adapt [post]
+func (h *UploadHandler) UploadFromURLAdapt(c *gin.Context) {
+	var body uploadFromURLAdaptBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Fail(c, http.StatusBadRequest, "url required")
+		return
+	}
+	opts := storage.UploadOptionsFromForm(map[string]string{
+		"scope":     body.Scope,
+		"resource":  body.Resource,
+		"productId": fmt.Sprintf("%d", body.ProductID),
+		"skuId":     fmt.Sprintf("%d", body.SkuID),
+	}, false)
+	if err := opts.Validate(); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	adapt := storage.ImageAdaptOptions{
+		AspectW:    body.AspectW,
+		AspectH:    body.AspectH,
+		CropX:      body.CropX,
+		CropY:      body.CropY,
+		CropW:      body.CropW,
+		CropH:      body.CropH,
+		MaxEdge:    body.MaxEdge,
+		DetailMaxW: body.DetailMaxW,
+		DetailMaxH: body.DetailMaxH,
+		Quality:    body.Quality,
+		PreferPNG:  body.PreferPNG,
+	}
+	url, err := storage.UploadFromURLAdapt(h.store, body.URL, opts, adapt)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return

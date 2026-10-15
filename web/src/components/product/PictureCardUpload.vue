@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Plus, VideoCamera, View, Picture } from '@element-plus/icons-vue'
+import { Plus, VideoCamera, View, Picture, FolderOpened } from '@element-plus/icons-vue'
 import { ElImageViewer, ElMessage } from 'element-plus'
 import type { UploadFile, UploadInstance, UploadRequestOptions, UploadUserFile } from 'element-plus'
 import { uploadImage, uploadImagesBatch, uploadVideo } from '../../api/upload'
@@ -9,6 +9,7 @@ import type { UploadValidateRules } from '../../utils/uploadValidate'
 import { acceptFromRules, validateUploadFile } from '../../utils/uploadValidate'
 import AiRetouchDialog from './AiRetouchDialog.vue'
 import ImageEraseDialog from './ImageEraseDialog.vue'
+import MaterialPickerDialog from './MaterialPickerDialog.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -26,6 +27,8 @@ const props = withDefaults(
     imageErase?: boolean
     eraseGallery?: string[]
     eraseGalleryIndex?: number
+    /** 从素材中心选取（仅图片模式） */
+    materialPick?: boolean
   }>(),
   {
     max: 10,
@@ -37,6 +40,7 @@ const props = withDefaults(
     aiRetouch: false,
     imageErase: false,
     eraseGalleryIndex: 0,
+    materialPick: true,
   },
 )
 
@@ -249,8 +253,23 @@ const retouchOpen = ref(false)
 const retouchIndex = ref(0)
 const eraseOpen = ref(false)
 const eraseIndex = ref(0)
+const materialOpen = ref(false)
 const canErase = computed(() => (props.imageErase || props.aiRetouch) && props.mode === 'image')
+const canMaterialPick = computed(
+  () => props.materialPick && props.mode === 'image' && !props.disabled && list.value.length < props.max,
+)
+const materialSlots = computed(() => Math.max(0, props.max - list.value.length))
 const dialogSources = computed(() => (props.eraseGallery && props.eraseGallery.length ? props.eraseGallery : list.value))
+
+function onMaterialConfirm(urls: string[]) {
+  if (!urls.length) return
+  const next = [...list.value]
+  for (const url of urls) {
+    if (next.length >= props.max) break
+    if (!next.includes(url)) next.push(url)
+  }
+  list.value = next
+}
 
 function openImagePreview(index: number) {
   if (canErase.value && !props.aiRetouch) {
@@ -418,6 +437,17 @@ function resetDrag() {
         <span class="upload-text">{{ uploadLabel }}</span>
       </div>
     </el-upload>
+    <button
+      v-if="canMaterialPick"
+      type="button"
+      class="picture-card add material-pick"
+      :class="sizeClass"
+      title="从素材中心选取"
+      @click="materialOpen = true"
+    >
+      <el-icon class="upload-icon"><FolderOpened /></el-icon>
+      <span class="upload-text">{{ size === 'inline' ? '素材' : '素材库' }}</span>
+    </button>
 
     <el-image-viewer
       v-if="imageViewerVisible"
@@ -466,6 +496,15 @@ function resetDrag() {
         autoplay
       />
     </el-dialog>
+
+    <MaterialPickerDialog
+      v-if="canMaterialPick || materialOpen"
+      v-model="materialOpen"
+      :max="materialSlots"
+      :rules="rules"
+      :upload-context="uploadContext"
+      @confirm="onMaterialConfirm"
+    />
   </div>
 </template>
 
@@ -535,6 +574,16 @@ function resetDrag() {
   height: 32px;
 }
 
+.picture-card.add.material-pick {
+  border-style: solid;
+  border-color: #c6e2ff;
+  background: #f0f7ff;
+  color: #409eff;
+  cursor: pointer;
+}
+.picture-card-upload.inline .picture-card.add.material-pick .upload-text {
+  display: none;
+}
 .picture-card.add {
   position: relative;
   display: flex;

@@ -91,6 +91,7 @@ export const MEDIA_UPLOAD_RULES = {
   skuSpec: {
     kind: 'image',
     maxSizeMB: 5,
+    aspectRatio: { w: 1, h: 1, label: '1:1' },
     acceptExt: ['jpg', 'jpeg', 'png'],
   },
 } satisfies Record<string, UploadValidateRules>

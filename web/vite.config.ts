@@ -16,6 +16,12 @@ if (!useGateway) {
     changeOrigin: true,
     rewrite: (path: string) => path.replace(/^\/iam/, '/api/v1'),
   }
+  // 本地直连素材中心，便于「从素材库选取」
+  proxy['/apps/material'] = {
+    target: 'http://localhost:8101',
+    changeOrigin: true,
+    rewrite: (path: string) => path.replace(/^\/apps\/material/, ''),
+  }
 }
 
 export default defineConfig({
