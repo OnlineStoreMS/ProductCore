@@ -9,17 +9,24 @@ import {
   type MaterialCategory,
   type MaterialItem,
 } from '../../api/material'
-import { uploadImageFromUrlAdapt, type UploadContext } from '../../api/upload'
-import type { UploadValidateRules } from '../../utils/uploadValidate'
+import { uploadImageFromUrlAdapt, uploadVideoFromUrl, type UploadContext } from '../../api/upload'
+import { matchAspectRatio, type UploadValidateRules } from '../../utils/uploadValidate'
 import { adaptParamsFromRules } from '../../utils/materialAdapt'
 import MaterialCropStep from './MaterialCropStep.vue'
 
-const props = defineProps<{
-  modelValue: boolean
-  max?: number
-  rules?: UploadValidateRules
-  uploadContext?: UploadContext
-}>()
+const props = withDefaults(
+  defineProps<{
+    modelValue: boolean
+    max?: number
+    rules?: UploadValidateRules
+    uploadContext?: UploadContext
+    /** 选取素材类型 */
+    mediaType?: 'image' | 'video'
+  }>(),
+  {
+    mediaType: 'image',
+  },
+)
 
 const emit = defineEmits<{
   'update:modelValue': [boolean]
@@ -46,9 +53,12 @@ const cropIndex = ref(0)
 const cropResults = ref<Map<number, { x: number; y: number; w: number; h: number } | null>>(new Map())
 
 const slots = computed(() => Math.max(1, props.max ?? 1))
-const needCrop = computed(() => !!(props.rules?.aspectRatio && props.rules.kind === 'image'))
+const isVideo = computed(() => props.mediaType === 'video')
+const needCrop = computed(() => !isVideo.value && !!(props.rules?.aspectRatio && props.rules.kind === 'image'))
 const aspectLabel = computed(() => props.rules?.aspectRatio?.label || '')
 const currentCrop = computed(() => cropQueue.value[cropIndex.value] || null)
+const unitLabel = computed(() => (isVideo.value ? '个' : '张'))
+const mediaLabel = computed(() => (isVideo.value ? '视频' : '图片'))
 
 const flatCats = computed(() => {
   const out: { id: number; name: string; depth: number }[] = [{ id: 0, name: '全部', depth: 0 }]
@@ -73,15 +83,16 @@ async function loadCategories() {
 async function loadMaterials() {
   loading.value = true
   try {
+    const want = props.mediaType || 'image'
     const res = await listMaterials({
       categoryId: selectedCatId.value || undefined,
       includeChildren: selectedCatId.value ? true : undefined,
-      mediaType: 'image',
+      mediaType: want,
       keyword: keyword.value.trim() || undefined,
       page: page.value,
       pageSize: 24,
     })
-    materials.value = (res.list || []).filter((m) => m.mediaType === 'image')
+    materials.value = (res.list || []).filter((m) => m.mediaType === want)
     total.value = res.total || 0
   } catch (e) {
     ElMessage.error((e as Error).message || '加载素材失败')
@@ -94,6 +105,13 @@ function isSelected(id: number) {
   return selected.value.some((m) => m.id === id)
 }
 
+function checkMaterialAspect(m: MaterialItem): string | null {
+  const rule = props.rules?.aspectRatio
+  if (!rule || !m.width || !m.height) return null
+  if (matchAspectRatio(m.width, m.height, rule)) return null
+  return `${mediaLabel.value}宽高比需为 ${rule.label}（当前 ${m.width}×${m.height}）`
+}
+
 function toggle(m: MaterialItem) {
   const i = selected.value.findIndex((x) => x.id === m.id)
   if (i >= 0) {
@@ -101,7 +119,12 @@ function toggle(m: MaterialItem) {
     return
   }
   if (selected.value.length >= slots.value) {
-    ElMessage.warning(`最多选择 ${slots.value} 张`)
+    ElMessage.warning(`最多选择 ${slots.value} ${unitLabel.value}`)
+    return
+  }
+  const aspectErr = checkMaterialAspect(m)
+  if (aspectErr) {
+    ElMessage.warning(aspectErr)
     return
   }
   selected.value.push(m)
@@ -131,6 +154,11 @@ async function applyAll(forcedCrop: { x: number; y: number; w: number; h: number
   const urls: string[] = []
   try {
     for (const m of selected.value) {
+      if (isVideo.value) {
+        const url = await uploadVideoFromUrl(materialAssetUrl(m.url), props.uploadContext)
+        urls.push(url)
+        continue
+      }
       let crop: { x: number; y: number; w: number; h: number } | undefined
       if (forcedCrop === 'per-item') {
         const c = cropResults.value.get(m.id)
@@ -146,7 +174,11 @@ async function applyAll(forcedCrop: { x: number; y: number; w: number; h: number
       const url = await uploadImageFromUrlAdapt(params, props.uploadContext)
       urls.push(url)
     }
-    ElMessage.success(`已添加 ${urls.length} 张（已压缩适配电商尺寸）`)
+    ElMessage.success(
+      isVideo.value
+        ? `已添加 ${urls.length} 个视频`
+        : `已添加 ${urls.length} 张（已压缩适配电商尺寸）`,
+    )
     emit('confirm', urls)
     visible.value = false
   } catch (e) {
@@ -200,6 +232,17 @@ watch([selectedCatId, page], () => {
   if (visible.value && phase.value === 'pick') void loadMaterials()
 })
 
+watch(
+  () => props.mediaType,
+  () => {
+    if (visible.value && phase.value === 'pick') {
+      page.value = 1
+      selected.value = []
+      void loadMaterials()
+    }
+  },
+)
+
 const pager = reactive({
   onSearch() {
     page.value = 1
@@ -220,9 +263,10 @@ const pager = reactive({
   >
     <template v-if="phase === 'pick'">
       <p class="hint">
-        仅图片；已选 {{ selected.length }}/{{ slots }}。
-        <template v-if="needCrop">将按 {{ aspectLabel }} 裁剪并压缩为电商清晰尺寸（原图过大时自动缩小）。</template>
-        <template v-else>详情图不强制比例，将限制宽高并压缩体积。</template>
+        仅{{ mediaLabel }}；已选 {{ selected.length }}/{{ slots }}。
+        <template v-if="isVideo && aspectLabel">需符合 {{ aspectLabel }} 比例。</template>
+        <template v-else-if="needCrop">将按 {{ aspectLabel }} 裁剪并压缩为电商清晰尺寸（原图过大时自动缩小）。</template>
+        <template v-else-if="!isVideo">详情图不强制比例，将限制宽高并压缩体积。</template>
       </p>
       <div class="toolbar">
         <el-select v-model="selectedCatId" style="width: 200px" filterable>
@@ -252,9 +296,10 @@ const pager = reactive({
           @click="toggle(m)"
         >
           <el-image :src="thumb(m)" fit="cover" class="thumb" lazy />
+          <span v-if="isVideo" class="video-badge">视频</span>
           <div class="name" :title="m.title">{{ m.title || m.fileName || '未命名' }}</div>
         </div>
-        <el-empty v-if="!loading && !materials.length" description="暂无图片素材" />
+        <el-empty v-if="!loading && !materials.length" :description="`暂无${mediaLabel}素材`" />
       </div>
 
       <div class="pager">
@@ -293,7 +338,7 @@ const pager = reactive({
           逐张裁剪添加
         </el-button>
         <el-button type="primary" :loading="applying" :disabled="!selected.length" @click="startApply('center')">
-          {{ needCrop ? '居中裁剪并添加' : '压缩并添加' }}
+          {{ isVideo ? '添加视频' : needCrop ? '居中裁剪并添加' : '压缩并添加' }}
         </el-button>
       </template>
     </template>
@@ -322,6 +367,7 @@ const pager = reactive({
   overflow: auto;
 }
 .card {
+  position: relative;
   border: 1px solid #ebeef5;
   border-radius: 8px;
   overflow: hidden;
@@ -337,6 +383,17 @@ const pager = reactive({
   aspect-ratio: 1;
   display: block;
   background: #f5f7fa;
+}
+.video-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.4;
 }
 .name {
   padding: 6px 8px;

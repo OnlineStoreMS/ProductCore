@@ -256,8 +256,9 @@ const eraseIndex = ref(0)
 const materialOpen = ref(false)
 const canErase = computed(() => (props.imageErase || props.aiRetouch) && props.mode === 'image')
 const canMaterialPick = computed(
-  () => props.materialPick && props.mode === 'image' && !props.disabled && list.value.length < props.max,
+  () => props.materialPick && !props.disabled && list.value.length < props.max,
 )
+const materialMediaType = computed<'image' | 'video'>(() => (props.mode === 'video' ? 'video' : 'image'))
 const materialSlots = computed(() => Math.max(0, props.max - list.value.length))
 const dialogSources = computed(() => (props.eraseGallery && props.eraseGallery.length ? props.eraseGallery : list.value))
 const showAddSlot = computed(() => list.value.length < props.max && !props.disabled)
@@ -427,7 +428,7 @@ function resetDrag() {
       </div>
       <button v-if="!disabled" type="button" class="remove-btn" @click.stop="removeAt(i)">×</button>
     </div>
-    <!-- 图片 + 素材库：悬浮弹出「本地上传 / 图库上传」 -->
+    <!-- 支持素材库：悬浮弹出「本地上传 / 图库上传」（图片与视频） -->
     <div
       v-if="showAddSlot && canMaterialPick"
       class="add-slot with-menu"
@@ -435,7 +436,8 @@ function resetDrag() {
     >
       <div class="picture-card add" :title="uploadLabel">
         <el-icon class="upload-icon">
-          <Picture v-if="size === 'inline'" />
+          <VideoCamera v-if="mode === 'video'" />
+          <Picture v-else-if="size === 'inline'" />
           <Plus v-else />
         </el-icon>
         <span class="upload-text">{{ uploadLabel }}</span>
@@ -465,7 +467,7 @@ function resetDrag() {
       </el-upload>
     </div>
 
-    <!-- 视频或关闭素材库：直接本地上传 -->
+    <!-- 关闭素材库：直接本地上传 -->
     <el-upload
       v-else-if="showAddSlot"
       ref="uploadRef"
@@ -540,6 +542,7 @@ function resetDrag() {
       v-if="canMaterialPick || materialOpen"
       v-model="materialOpen"
       :max="materialSlots"
+      :media-type="materialMediaType"
       :rules="rules"
       :upload-context="uploadContext"
       @confirm="onMaterialConfirm"

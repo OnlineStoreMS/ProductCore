@@ -74,6 +74,7 @@ func RegisterRoutes(
 	g.POST("/upload", uploadH.Upload)
 	g.POST("/upload/batch", uploadH.UploadBatch)
 	g.POST("/upload/video", uploadH.UploadVideo)
+	g.POST("/upload/video/from-url", uploadH.UploadVideoFromURL)
 	g.POST("/upload/from-url", uploadH.UploadFromURL)
 	g.POST("/upload/from-url-adapt", uploadH.UploadFromURLAdapt)
 	g.POST("/ai/images/retouch", aiImageH.Retouch)

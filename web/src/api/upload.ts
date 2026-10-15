@@ -124,3 +124,20 @@ export async function uploadVideo(file: File, ctx?: UploadContext): Promise<stri
   const data = unwrap<{ url: string }>(res)
   return data.url
 }
+
+/** 从素材 URL 下载视频并写入商品存储 */
+export async function uploadVideoFromUrl(sourceUrl: string, ctx?: UploadContext): Promise<string> {
+  const res = await client.post(
+    '/upload/video/from-url',
+    {
+      url: sourceUrl,
+      scope: ctx?.scope,
+      resource: ctx?.resource,
+      productId: ctx?.productId,
+      skuId: ctx?.skuId,
+    },
+    { timeout: 600000 },
+  )
+  const data = unwrap<{ url: string }>(res)
+  return data.url
+}

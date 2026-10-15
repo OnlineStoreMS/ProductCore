@@ -250,6 +250,42 @@ func (h *UploadHandler) UploadFromURL(c *gin.Context) {
 	response.OK(c, gin.H{"url": url})
 }
 
+// UploadVideoFromURL godoc
+//
+//	@Summary		从 URL 上传视频
+//	@Description	下载远程视频并写入存储（素材中心选取视频）
+//	@Tags			admin-上传
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		uploadFromURLBody	true	"远程视频 URL 与上传上下文"
+//	@Success		200		{object}	response.UploadURLResp
+//	@Failure		400		{object}	response.Body
+//	@Router			/admin/upload/video/from-url [post]
+func (h *UploadHandler) UploadVideoFromURL(c *gin.Context) {
+	var body uploadFromURLBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Fail(c, http.StatusBadRequest, "url required")
+		return
+	}
+	opts := storage.UploadOptionsFromForm(map[string]string{
+		"scope":     body.Scope,
+		"resource":  body.Resource,
+		"productId": fmt.Sprintf("%d", body.ProductID),
+		"skuId":     fmt.Sprintf("%d", body.SkuID),
+	}, true)
+	if err := opts.Validate(); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	url, err := storage.UploadVideoFromURL(h.store, body.URL, opts)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"url": url})
+}
+
 // UploadFromURLAdapt godoc
 //
 //	@Summary		从素材 URL 适配上传

@@ -101,7 +101,7 @@ function fileExt(name: string): string {
   return i >= 0 ? name.slice(i + 1).toLowerCase() : ''
 }
 
-function matchAspectRatio(width: number, height: number, rule: AspectRatioRule): boolean {
+export function matchAspectRatio(width: number, height: number, rule: AspectRatioRule): boolean {
   if (width <= 0 || height <= 0) return false
   const actual = width / height
   const expected = rule.w / rule.h
