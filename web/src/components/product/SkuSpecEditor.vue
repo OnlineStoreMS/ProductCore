@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { Plus, Delete, View } from '@element-plus/icons-vue'
+import { Plus, Delete, Rank, View } from '@element-plus/icons-vue'
 import PictureCardUpload from './PictureCardUpload.vue'
 import ErpFormRow from './ErpFormRow.vue'
 import { ElImageViewer, ElMessage, ElMessageBox } from 'element-plus'
@@ -161,6 +161,51 @@ function removeSpecValue(specIndex: number, valueIndex: number) {
   localSpecs.value = localSpecs.value.map((s, i) =>
     i === specIndex ? { ...s, values: s.values.filter((_, vi) => vi !== valueIndex) } : s,
   )
+}
+
+const dragSpecIndex = ref<number | null>(null)
+const dragValueFrom = ref<number | null>(null)
+const dragValueOver = ref<number | null>(null)
+
+function resetValueDrag() {
+  dragSpecIndex.value = null
+  dragValueFrom.value = null
+  dragValueOver.value = null
+}
+
+function onValueDragStart(specIndex: number, valueIndex: number, event: DragEvent) {
+  const count = localSpecs.value[specIndex]?.values.length ?? 0
+  if (count < 2) return
+  dragSpecIndex.value = specIndex
+  dragValueFrom.value = valueIndex
+  event.dataTransfer?.setData('text/plain', `${specIndex}:${valueIndex}`)
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+}
+
+function onValueDragOver(specIndex: number, valueIndex: number, event: DragEvent) {
+  if (dragSpecIndex.value !== specIndex || dragValueFrom.value === null) return
+  event.preventDefault()
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
+  dragValueOver.value = valueIndex
+}
+
+function onValueDrop(specIndex: number, valueIndex: number) {
+  const from = dragValueFrom.value
+  if (dragSpecIndex.value !== specIndex || from === null) {
+    resetValueDrag()
+    return
+  }
+  if (from !== valueIndex) {
+    localSpecs.value = localSpecs.value.map((spec, index) => {
+      if (index !== specIndex) return spec
+      const values = [...spec.values]
+      const [moved] = values.splice(from, 1)
+      if (!moved) return spec
+      values.splice(valueIndex, 0, moved)
+      return { ...spec, values }
+    })
+  }
+  resetValueDrag()
 }
 
 function specValueTexts(values: SkuSpecValue[]) {
@@ -653,7 +698,25 @@ async function removeSkuRow(row: SkuItem) {
             <span class="field-label">规格值</span>
             <div class="spec-value-area">
               <div class="spec-value-grid">
-                <div v-for="(sv, vi) in spec.values" :key="vi" class="spec-value-cell">
+                <div
+                  v-for="(sv, vi) in spec.values"
+                  :key="vi"
+                  class="spec-value-cell"
+                  :class="{ 'spec-value-cell--over': dragSpecIndex === si && dragValueOver === vi && dragValueFrom !== vi }"
+                  @dragover="onValueDragOver(si, vi, $event)"
+                  @drop="onValueDrop(si, vi)"
+                >
+                  <button
+                    v-if="spec.values.length > 1"
+                    type="button"
+                    class="value-drag-handle"
+                    title="拖动排序"
+                    draggable="true"
+                    @dragstart="onValueDragStart(si, vi, $event)"
+                    @dragend="resetValueDrag"
+                  >
+                    <el-icon><Rank /></el-icon>
+                  </button>
                   <div
                     class="spec-value-input-shell"
                     :class="{ 'spec-value-input-shell--duplicate': isDuplicateSpecValue(si, vi) }"
@@ -994,6 +1057,33 @@ async function removeSkuRow(row: SkuItem) {
   align-items: center;
   gap: 6px;
   min-width: 0;
+  border-radius: 4px;
+}
+
+.spec-value-cell--over {
+  outline: 1px dashed #ff7700;
+  background: #fff7e6;
+}
+
+.value-drag-handle {
+  border: none;
+  background: transparent;
+  padding: 0;
+  width: 16px;
+  height: 32px;
+  color: rgba(0, 0, 0, 0.35);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.value-drag-handle:active {
+  cursor: grabbing;
+}
+
+.value-drag-handle:hover {
+  color: #ff7700;
 }
 
 .spec-value-input-shell {
