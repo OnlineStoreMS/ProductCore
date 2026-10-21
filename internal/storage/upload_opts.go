@@ -88,13 +88,16 @@ func BuildStoredFilename(resource, originalName, contentType string) string {
 	if ext == "" {
 		ext = extFromContentType(contentType)
 	}
+	if ext == ".jfif" {
+		ext = ".jpg"
+	}
 	hint := sanitizeResourceHint(resource)
 	return fmt.Sprintf("%s_%d_%s%s", hint, time.Now().Unix(), uuid.NewString()[:6], ext)
 }
 
 func extFromContentType(ct string) string {
 	switch strings.ToLower(ct) {
-	case "image/jpeg", "image/jpg":
+	case "image/jpeg", "image/jpg", "image/jfif", "image/pjpeg":
 		return ".jpg"
 	case "image/png":
 		return ".png"
@@ -186,10 +189,14 @@ func productResourceSegments(opts UploadOptions) []string {
 
 func detectContentType(filename, headerCT string) string {
 	if headerCT != "" && headerCT != "application/octet-stream" {
-		return strings.ToLower(headerCT)
+		ct := strings.ToLower(strings.TrimSpace(strings.Split(headerCT, ";")[0]))
+		if ct == "image/jfif" || ct == "image/pjpeg" {
+			return "image/jpeg"
+		}
+		return ct
 	}
 	switch strings.ToLower(filepath.Ext(filename)) {
-	case ".jpg", ".jpeg":
+	case ".jpg", ".jpeg", ".jfif":
 		return "image/jpeg"
 	case ".png":
 		return "image/png"

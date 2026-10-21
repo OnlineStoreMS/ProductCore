@@ -72,7 +72,7 @@ func UploadFromURL(store Storage, rawURL string, opts UploadOptions) (string, er
 
 	filename := filenameFromURL(parsed, resp.Header.Get("Content-Type"))
 	if !isAllowedImageName(filename, resp.Header.Get("Content-Type")) {
-		return "", fmt.Errorf("unsupported image type (jpg/jpeg/png/webp)")
+		return "", fmt.Errorf("unsupported image type (jpg/jpeg/jfif/png/webp)")
 	}
 	return store.UploadPath(tmpPath, filename, opts)
 }
@@ -86,7 +86,7 @@ func filenameFromURL(parsed *url.URL, contentType string) string {
 	ext := filepath.Ext(name)
 	if ext == "" {
 		switch strings.ToLower(strings.Split(contentType, ";")[0]) {
-		case "image/jpeg", "image/jpg":
+		case "image/jpeg", "image/jpg", "image/jfif", "image/pjpeg":
 			ext = ".jpg"
 		case "image/png":
 			ext = ".png"
@@ -103,12 +103,12 @@ func filenameFromURL(parsed *url.URL, contentType string) string {
 func isAllowedImageName(filename, contentType string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
 	switch ext {
-	case ".jpg", ".jpeg", ".png", ".webp":
+	case ".jpg", ".jpeg", ".jfif", ".png", ".webp":
 		return true
 	}
 	ct := strings.ToLower(strings.Split(contentType, ";")[0])
 	switch ct {
-	case "image/jpeg", "image/jpg", "image/png", "image/webp":
+	case "image/jpeg", "image/jpg", "image/jfif", "image/pjpeg", "image/png", "image/webp":
 		return true
 	}
 	return false

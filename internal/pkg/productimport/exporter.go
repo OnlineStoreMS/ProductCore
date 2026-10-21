@@ -364,6 +364,8 @@ func normalizeImageExt(ext string) string {
 	switch ext {
 	case ".jpg", ".jpeg", ".png", ".webp":
 		return ext
+	case ".jfif":
+		return ".jpg"
 	default:
 		return ".jpg"
 	}
@@ -388,6 +390,8 @@ func extFromURL(raw string) string {
 	switch ext {
 	case ".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov", ".webm", ".avi":
 		return ext
+	case ".jfif":
+		return ".jpg"
 	default:
 		return ".jpg"
 	}

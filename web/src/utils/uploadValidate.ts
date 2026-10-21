@@ -18,18 +18,20 @@ export interface UploadValidateRules {
   maxHeightWidthRatio?: number
 }
 
+const rasterExt = ['jpg', 'jpeg', 'jfif', 'png']
+
 export const MEDIA_UPLOAD_RULES = {
   main: {
     kind: 'image',
     maxSizeMB: 10,
     aspectRatio: { w: 1, h: 1, label: '1:1' },
-    acceptExt: ['jpg', 'jpeg', 'png'],
+    acceptExt: rasterExt,
   },
   pic34: {
     kind: 'image',
     maxSizeMB: 5,
     aspectRatio: { w: 3, h: 4, label: '3:4' },
-    acceptExt: ['jpg', 'jpeg', 'png'],
+    acceptExt: rasterExt,
   },
   video11: {
     kind: 'video',
@@ -59,7 +61,7 @@ export const MEDIA_UPLOAD_RULES = {
     kind: 'image',
     maxSizeMB: 5,
     aspectRatio: { w: 1, h: 1, label: '1:1' },
-    acceptExt: ['jpg', 'jpeg', 'png'],
+    acceptExt: rasterExt,
   },
   materialTransparent: {
     kind: 'image',
@@ -71,18 +73,18 @@ export const MEDIA_UPLOAD_RULES = {
     kind: 'image',
     maxSizeMB: 5,
     aspectRatio: { w: 3, h: 4, label: '3:4' },
-    acceptExt: ['jpg', 'jpeg', 'png'],
+    acceptExt: rasterExt,
   },
   materialLong: {
     kind: 'image',
     maxSizeMB: 5,
     aspectRatio: { w: 2, h: 3, label: '2:3' },
-    acceptExt: ['jpg', 'jpeg', 'png'],
+    acceptExt: rasterExt,
   },
   detail: {
     kind: 'image',
     maxSizeMB: 5,
-    acceptExt: ['jpg', 'jpeg', 'png'],
+    acceptExt: rasterExt,
     minWidth: 620,
     maxWidth: 1290,
     maxHeight: 2000,
@@ -92,7 +94,7 @@ export const MEDIA_UPLOAD_RULES = {
     kind: 'image',
     maxSizeMB: 5,
     aspectRatio: { w: 1, h: 1, label: '1:1' },
-    acceptExt: ['jpg', 'jpeg', 'png'],
+    acceptExt: rasterExt,
   },
 } satisfies Record<string, UploadValidateRules>
 
@@ -213,10 +215,13 @@ export function acceptFromRules(rules: UploadValidateRules): string {
   if (rules.kind === 'video') {
     return rules.acceptExt?.includes('mp4') ? 'video/mp4,.mp4' : 'video/*'
   }
-  const mimes = (rules.acceptExt || ['jpg', 'jpeg', 'png']).map((ext) => {
-    if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg'
+  const exts = rules.acceptExt || ['jpg', 'jpeg', 'jfif', 'png']
+  const mimes = exts.map((ext) => {
+    if (ext === 'jpg' || ext === 'jpeg' || ext === 'jfif') return 'image/jpeg'
     if (ext === 'png') return 'image/png'
     return `image/${ext}`
   })
-  return [...new Set(mimes)].join(',')
+  const accept = [...new Set(mimes)]
+  if (exts.includes('jfif')) accept.push('.jfif')
+  return accept.join(',')
 }

@@ -27,7 +27,7 @@ var (
 )
 
 var allowedSkuImageExt = map[string]struct{}{
-	".jpg": {}, ".jpeg": {}, ".png": {}, ".webp": {},
+	".jpg": {}, ".jpeg": {}, ".jfif": {}, ".png": {}, ".webp": {},
 }
 
 var allowedVideoExt = map[string]struct{}{
@@ -260,7 +260,7 @@ func listImageFiles(dir string) ([]string, error) {
 		}
 		ext := strings.ToLower(filepath.Ext(e.Name()))
 		switch ext {
-		case ".jpg", ".jpeg", ".png", ".webp":
+		case ".jpg", ".jpeg", ".jfif", ".png", ".webp":
 			files = append(files, filepath.Join(dir, e.Name()))
 		}
 	}

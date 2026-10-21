@@ -215,7 +215,7 @@ const effectiveAccept = computed(() => {
   if (props.rules) return acceptFromRules(props.rules)
   if (props.mode === 'video') return 'video/mp4,.mp4'
   if (props.accept) return props.accept
-  return 'image/jpeg,image/png,image/jpg'
+  return 'image/jpeg,image/png,image/jpg,.jfif'
 })
 
 const effectiveRules = computed(() => {
