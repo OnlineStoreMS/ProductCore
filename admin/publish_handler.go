@@ -101,7 +101,7 @@ func (h *ProductHandler) StartPublishUpdate(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "请选择店铺并填写商品 ID")
 		return
 	}
-	item, err := h.pub(c).StartUpdate(id, in.Platform, in.PlatformShopID, in.PlatformProductID)
+	item, err := h.pub(c).StartUpdate(id, in.Platform, in.PlatformShopID, in.PlatformProductID, in.Scope)
 	if err != nil {
 		if errors.Is(err, service.ErrNotFound) {
 			response.Fail(c, http.StatusNotFound, "商品不存在")

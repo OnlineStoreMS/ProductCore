@@ -160,7 +160,7 @@ func (s *ProductPublishService) Start(productID uint64, platform, platformShopID
 	if err != nil {
 		return nil, err
 	}
-	params, err := buildPublishParams(product, shop, s.categoryPath(product.CategoryID))
+	params, err := buildPublishParams(product, shop, s.categoryPath(product.CategoryID), false)
 	if err != nil {
 		return nil, err
 	}
@@ -209,10 +209,17 @@ func (s *ProductPublishService) Start(productID uint64, platform, platformShopID
 	}, nil
 }
 
-func (s *ProductPublishService) StartUpdate(productID uint64, platform, platformShopID, platformProductID string) (*dto.StartPublishResult, error) {
+func (s *ProductPublishService) StartUpdate(productID uint64, platform, platformShopID, platformProductID, scope string) (*dto.StartPublishResult, error) {
 	platform = strings.TrimSpace(platform)
 	platformShopID = strings.TrimSpace(platformShopID)
 	platformProductID = strings.TrimSpace(platformProductID)
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		scope = "all"
+	}
+	if scope != "all" && scope != "sku" {
+		return nil, errors.New("更新范围不正确")
+	}
 	if platform == "" || platformShopID == "" {
 		return nil, errors.New("请选择店铺")
 	}
@@ -267,11 +274,12 @@ func (s *ProductPublishService) StartUpdate(productID uint64, platform, platform
 	if err != nil {
 		return nil, err
 	}
-	params, err := buildPublishParams(product, shop, s.categoryPath(product.CategoryID))
+	params, err := buildPublishParams(product, shop, s.categoryPath(product.CategoryID), scope == "sku")
 	if err != nil {
 		return nil, err
 	}
 	params.PlatformProductID = platformProductID
+	params.UpdateScope = scope
 	raw, err := json.Marshal(params)
 	if err != nil {
 		return nil, err
@@ -507,6 +515,7 @@ type publishParams struct {
 	DetailImages      []string     `json:"detailImages"`
 	Skus              []publishSku `json:"skus"`
 	PlatformProductID string       `json:"platformProductId,omitempty"`
+	UpdateScope       string       `json:"updateScope,omitempty"`
 }
 
 type publishSku struct {
@@ -541,16 +550,16 @@ func (s *ProductPublishService) categoryPath(categoryID uint64) []string {
 	return names
 }
 
-func buildPublishParams(p *dto.ProductDTO, shop *agentscenter.ShopItem, path []string) (*publishParams, error) {
+func buildPublishParams(p *dto.ProductDTO, shop *agentscenter.ShopItem, path []string, skuOnly bool) (*publishParams, error) {
 	title := trimDouyinTitle(strings.TrimSpace(p.Name), 60)
-	if title == "" {
+	if title == "" && !skuOnly {
 		return nil, errors.New("商品标题为空")
 	}
 	mains := uniqueNonEmpty(append([]string{p.Pic}, p.AlbumPics...))
 	if len(mains) > 5 {
 		mains = mains[:5]
 	}
-	if len(mains) == 0 {
+	if len(mains) == 0 && !skuOnly {
 		return nil, errors.New("商品没有主图")
 	}
 	var details []string

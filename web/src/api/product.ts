@@ -159,7 +159,7 @@ export async function startProductPublish(id: number, body: { platform: string; 
 
 export async function startProductPublishUpdate(
   id: number,
-  body: { platform: string; platformShopId: string; platformProductId: string },
+  body: { platform: string; platformShopId: string; platformProductId: string; scope?: 'all' | 'sku' },
 ) {
   const res = await client.post(`/products/${id}/publish-update`, body)
   return unwrap<StartPublishResult>(res)

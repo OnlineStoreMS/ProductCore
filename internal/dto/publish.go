@@ -28,6 +28,8 @@ type StartPublishUpdateRequest struct {
 	Platform          string `json:"platform" binding:"required"`
 	PlatformShopID    string `json:"platformShopId" binding:"required"`
 	PlatformProductID string `json:"platformProductId" binding:"required"`
+	// all 覆盖标题和图片；sku 只更新商品规格。空值按 all。
+	Scope string `json:"scope,omitempty"`
 }
 
 type StartPublishResult struct {

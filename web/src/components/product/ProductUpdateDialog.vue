@@ -21,6 +21,7 @@ const shops = ref<PublishShop[]>([])
 const selected = ref('')
 const platformProductId = ref('')
 const filledFromShop = ref('')
+const scope = ref<'all' | 'sku'>('all')
 
 watch(
   () => props.modelValue,
@@ -56,6 +57,7 @@ async function load() {
   hint.value = ''
   platformProductId.value = ''
   filledFromShop.value = ''
+  scope.value = 'all'
   try {
     const data = await fetchPublishShops(props.productId)
     shops.value = data.list || []
@@ -86,8 +88,13 @@ async function start() {
       platform: shop.platform,
       platformShopId: shop.platformShopId,
       platformProductId: productNo,
+      scope: scope.value,
     })
-    ElMessage.success('已开始更新，店铺电脑会按这个商品 ID 覆盖后重新提交')
+    ElMessage.success(
+      scope.value === 'sku'
+        ? '已开始更新商品规格，标题和图片保持店铺里现在的内容'
+        : '已开始更新，店铺电脑会按这个商品 ID 覆盖后重新提交',
+    )
     emit('started', {
       productId: props.productId,
       shopId: res.id,
@@ -138,6 +145,14 @@ async function start() {
           clearable
         />
       </label>
+      <div class="update-scope">
+        <span>更新范围</span>
+        <el-radio-group v-model="scope">
+          <el-radio value="all">全部信息</el-radio>
+          <el-radio value="sku">只更新商品规格</el-radio>
+        </el-radio-group>
+        <p v-if="scope === 'sku'" class="publish-hint">只重填规格、规格图和价格库存。标题、主图、详情图和发货时间保持不动。</p>
+      </div>
     </div>
     <template #footer>
       <el-button @click="emit('update:modelValue', false)">取消</el-button>
@@ -196,7 +211,8 @@ async function start() {
   font-size: 13px;
 }
 
-.product-id {
+.product-id,
+.update-scope {
   display: flex;
   flex-direction: column;
   gap: 6px;
