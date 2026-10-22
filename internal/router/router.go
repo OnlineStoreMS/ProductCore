@@ -47,7 +47,8 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 	listingSvc := service.NewPlatformListingService(repos, productSvc)
 
 	agentsClient := agentscenter.NewClient(cfg.Integrations.AgentsCenterAPIURL, cfg.Integrations.AgentsCenterToken)
-	publishSvc := service.NewProductPublishService(repos, productSvc, agentsClient)
+	aiClient := aimodel.NewClient(cfg.Integrations.AIModelAPIURL, cfg.Integrations.AIModelToken)
+	publishSvc := service.NewProductPublishService(repos, productSvc, agentsClient, aiClient)
 	productH := admin.NewProductHandler(productSvc, listingSvc, publishSvc)
 	importSvc := service.NewProductImportService(productSvc, store)
 	exportSvc := service.NewProductExportService(productSvc, store)
@@ -60,7 +61,7 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 	platformShopH := admin.NewPlatformShopHandler(platformShopSvc, listingSvc)
 	uploadH := admin.NewUploadHandler(store)
 	aiImageH := admin.NewAIImageHandler(
-		aimodel.NewClient(cfg.Integrations.AIModelAPIURL, cfg.Integrations.AIModelToken),
+		aiClient,
 		imageerase.NewClient(cfg.Integrations.ImageEraseURL),
 		store,
 	)

@@ -30,6 +30,12 @@ type StartPublishUpdateRequest struct {
 	PlatformProductID string `json:"platformProductId" binding:"required"`
 	// all 覆盖标题和图片；sku 只更新商品规格。空值按 all。
 	Scope string `json:"scope,omitempty"`
+	// 全部信息时使用。空则用商品现有标题。
+	Title string `json:"title,omitempty"`
+}
+
+type ListingTitleResult struct {
+	Title string `json:"title"`
 }
 
 type StartPublishResult struct {

@@ -159,10 +159,21 @@ export async function startProductPublish(id: number, body: { platform: string; 
 
 export async function startProductPublishUpdate(
   id: number,
-  body: { platform: string; platformShopId: string; platformProductId: string; scope?: 'all' | 'sku' },
+  body: {
+    platform: string
+    platformShopId: string
+    platformProductId: string
+    scope?: 'all' | 'sku'
+    title?: string
+  },
 ) {
   const res = await client.post(`/products/${id}/publish-update`, body)
   return unwrap<StartPublishResult>(res)
+}
+
+export async function suggestListingTitle(id: number) {
+  const res = await client.post(`/products/${id}/listing-title`, {}, { timeout: 180000 })
+  return unwrap<{ title: string }>(res)
 }
 
 export async function discardEditDraft(id: number) {

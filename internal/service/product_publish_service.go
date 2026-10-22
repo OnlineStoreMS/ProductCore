@@ -8,6 +8,7 @@ import (
 
 	"productcore/internal/dto"
 	"productcore/internal/integrations/agentscenter"
+	"productcore/internal/integrations/aimodel"
 	"productcore/internal/model"
 	"productcore/internal/repo"
 )
@@ -20,15 +21,17 @@ type ProductPublishService struct {
 	categories *repo.CategoryRepo
 	productSvc *ProductService
 	agents     *agentscenter.Client
+	ai         *aimodel.Client
 	tenantID   uint64
 }
 
-func NewProductPublishService(repos *repo.Repos, productSvc *ProductService, agents *agentscenter.Client) *ProductPublishService {
+func NewProductPublishService(repos *repo.Repos, productSvc *ProductService, agents *agentscenter.Client, ai *aimodel.Client) *ProductPublishService {
 	return &ProductPublishService{
 		repo:       repos.ProductPublish,
 		categories: repos.Category,
 		productSvc: productSvc,
 		agents:     agents,
+		ai:         ai,
 		tenantID:   1,
 	}
 }
@@ -209,7 +212,7 @@ func (s *ProductPublishService) Start(productID uint64, platform, platformShopID
 	}, nil
 }
 
-func (s *ProductPublishService) StartUpdate(productID uint64, platform, platformShopID, platformProductID, scope string) (*dto.StartPublishResult, error) {
+func (s *ProductPublishService) StartUpdate(productID uint64, platform, platformShopID, platformProductID, scope, listingTitle string) (*dto.StartPublishResult, error) {
 	platform = strings.TrimSpace(platform)
 	platformShopID = strings.TrimSpace(platformShopID)
 	platformProductID = strings.TrimSpace(platformProductID)
@@ -277,6 +280,14 @@ func (s *ProductPublishService) StartUpdate(productID uint64, platform, platform
 	params, err := buildPublishParams(product, shop, s.categoryPath(product.CategoryID), scope == "sku")
 	if err != nil {
 		return nil, err
+	}
+	if scope == "all" {
+		if title := cleanGeneratedTitle(listingTitle); title != "" {
+			if douyinTitleWeight(title) < 16 {
+				return nil, errors.New("电商标题太短")
+			}
+			params.Title = title
+		}
 	}
 	params.PlatformProductID = platformProductID
 	params.UpdateScope = scope
