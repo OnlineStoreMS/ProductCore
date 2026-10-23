@@ -44,7 +44,7 @@ func (h *ProductHandler) ListPublishShops(c *gin.Context) {
 // StartPublish godoc
 //
 //	@Summary		开始铺货
-//	@Description	按商品生成铺货任务，下发到该电商店铺所在的 WindowsAgent
+//	@Description	按商品生成铺货任务。若带了电商标题或主图，选中的店铺使用这些内容
 //	@Tags			admin-商品
 //	@Accept			json
 //	@Produce		json
@@ -65,7 +65,7 @@ func (h *ProductHandler) StartPublish(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "请选择店铺")
 		return
 	}
-	item, err := h.pub(c).Start(id, in.Platform, in.PlatformShopID)
+	item, err := h.pub(c).Start(id, in.Platform, in.PlatformShopID, in.Title, in.MainImages)
 	if err != nil {
 		if errors.Is(err, service.ErrNotFound) {
 			response.Fail(c, http.StatusNotFound, "商品不存在")
@@ -101,7 +101,7 @@ func (h *ProductHandler) StartPublishUpdate(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "请选择店铺并填写商品 ID")
 		return
 	}
-	item, err := h.pub(c).StartUpdate(id, in.Platform, in.PlatformShopID, in.PlatformProductID, in.Scope, in.Title)
+	item, err := h.pub(c).StartUpdate(id, in.Platform, in.PlatformShopID, in.PlatformProductID, in.Scope, in.Title, in.MainImages)
 	if err != nil {
 		if errors.Is(err, service.ErrNotFound) {
 			response.Fail(c, http.StatusNotFound, "商品不存在")

@@ -353,6 +353,7 @@ function onPublishStarted(payload: {
           </template>
         </el-table-column>
         <el-table-column prop="createTime" label="创建时间" width="160" />
+        <el-table-column prop="updateTime" label="更新时间" width="160" />
         <el-table-column label="上架" width="80" align="center">
           <template #default="{ row }">
             <el-switch :model-value="!!row.publishStatus" @change="togglePublish(row)" />

@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { fetchPublishShops, startProductPublish, type PublishShop } from '../../api/product'
+import ListingPrepareFields from './ListingPrepareFields.vue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -19,6 +20,9 @@ const starting = ref(false)
 const hint = ref('')
 const shops = ref<PublishShop[]>([])
 const selected = ref('')
+const listingTitle = ref('')
+const mainImages = ref<string[]>([])
+const imagesReady = ref(false)
 
 watch(
   () => props.modelValue,
@@ -64,11 +68,14 @@ async function start() {
   }
   starting.value = true
   try {
+    const title = listingTitle.value.trim()
     const res = await startProductPublish(props.productId, {
       platform: shop.platform,
       platformShopId: shop.platformShopId,
+      title: title || undefined,
+      mainImages: imagesReady.value ? mainImages.value : undefined,
     })
-    ElMessage.success('已开始铺货，店铺电脑会下载图片并上架')
+    ElMessage.success(title ? '已用新标题开始铺货' : '已开始铺货，店铺电脑会下载图片并上架')
     emit('started', {
       productId: props.productId,
       shopId: res.id,
@@ -89,10 +96,18 @@ async function start() {
   <el-dialog
     :model-value="modelValue"
     title="铺货到电商店铺"
-    width="520px"
+    width="780px"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <p class="publish-product">{{ productName }}</p>
+    <ListingPrepareFields
+      :active="modelValue"
+      :product-id="productId"
+      :product-name="productName"
+      v-model:title="listingTitle"
+      v-model:images="mainImages"
+      v-model:ready="imagesReady"
+    />
+    <p v-if="listingTitle.trim()" class="publish-hint">选中的店铺会使用上面的新标题铺货。</p>
     <div v-loading="loading" class="publish-shops">
       <el-empty v-if="!loading && !shops.length" :description="hint || '没有在线的电商店铺'" />
       <el-radio-group v-else v-model="selected" class="publish-list">
@@ -119,13 +134,9 @@ async function start() {
 </template>
 
 <style scoped>
-.publish-product {
-  margin: 0 0 12px;
-  color: #606266;
-}
-
 .publish-shops {
   min-height: 120px;
+  margin-top: 16px;
 }
 
 .publish-list {

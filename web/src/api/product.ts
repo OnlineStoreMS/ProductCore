@@ -152,7 +152,10 @@ export async function fetchPublishShops(productId?: number) {
   return unwrap<PublishShopList>(res)
 }
 
-export async function startProductPublish(id: number, body: { platform: string; platformShopId: string }) {
+export async function startProductPublish(
+  id: number,
+  body: { platform: string; platformShopId: string; title?: string; mainImages?: string[] },
+) {
   const res = await client.post(`/products/${id}/publish`, body)
   return unwrap<StartPublishResult>(res)
 }
@@ -165,6 +168,7 @@ export async function startProductPublishUpdate(
     platformProductId: string
     scope?: 'all' | 'sku'
     title?: string
+    mainImages?: string[]
   },
 ) {
   const res = await client.post(`/products/${id}/publish-update`, body)

@@ -20,8 +20,10 @@ type PublishShopListDTO struct {
 }
 
 type StartPublishRequest struct {
-	Platform       string `json:"platform" binding:"required"`
-	PlatformShopID string `json:"platformShopId" binding:"required"`
+	Platform       string   `json:"platform" binding:"required"`
+	PlatformShopID string   `json:"platformShopId" binding:"required"`
+	Title          string   `json:"title,omitempty"`
+	MainImages     []string `json:"mainImages,omitempty"`
 }
 
 type StartPublishUpdateRequest struct {
@@ -32,6 +34,8 @@ type StartPublishUpdateRequest struct {
 	Scope string `json:"scope,omitempty"`
 	// 全部信息时使用。空则用商品现有标题。
 	Title string `json:"title,omitempty"`
+	// 全部信息时使用。不传则用商品主图；传入后按顺序最多取前 5 张。
+	MainImages []string `json:"mainImages,omitempty"`
 }
 
 type ListingTitleResult struct {

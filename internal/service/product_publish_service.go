@@ -109,7 +109,7 @@ func (s *ProductPublishService) ListShops(productID uint64) (*dto.PublishShopLis
 	return out, nil
 }
 
-func (s *ProductPublishService) Start(productID uint64, platform, platformShopID string) (*dto.StartPublishResult, error) {
+func (s *ProductPublishService) Start(productID uint64, platform, platformShopID, listingTitle string, mainImages []string) (*dto.StartPublishResult, error) {
 	platform = strings.TrimSpace(platform)
 	platformShopID = strings.TrimSpace(platformShopID)
 	if platform == "" || platformShopID == "" {
@@ -167,6 +167,9 @@ func (s *ProductPublishService) Start(productID uint64, platform, platformShopID
 	if err != nil {
 		return nil, err
 	}
+	if err := applyListingOverrides(params, listingTitle, mainImages); err != nil {
+		return nil, err
+	}
 	raw, err := json.Marshal(params)
 	if err != nil {
 		return nil, err
@@ -212,7 +215,7 @@ func (s *ProductPublishService) Start(productID uint64, platform, platformShopID
 	}, nil
 }
 
-func (s *ProductPublishService) StartUpdate(productID uint64, platform, platformShopID, platformProductID, scope, listingTitle string) (*dto.StartPublishResult, error) {
+func (s *ProductPublishService) StartUpdate(productID uint64, platform, platformShopID, platformProductID, scope, listingTitle string, mainImages []string) (*dto.StartPublishResult, error) {
 	platform = strings.TrimSpace(platform)
 	platformShopID = strings.TrimSpace(platformShopID)
 	platformProductID = strings.TrimSpace(platformProductID)
@@ -282,11 +285,8 @@ func (s *ProductPublishService) StartUpdate(productID uint64, platform, platform
 		return nil, err
 	}
 	if scope == "all" {
-		if title := cleanGeneratedTitle(listingTitle); title != "" {
-			if douyinTitleWeight(title) < 16 {
-				return nil, errors.New("电商标题太短")
-			}
-			params.Title = title
+		if err := applyListingOverrides(params, listingTitle, mainImages); err != nil {
+			return nil, err
 		}
 	}
 	params.PlatformProductID = platformProductID
@@ -559,6 +559,27 @@ func (s *ProductPublishService) categoryPath(categoryID uint64) []string {
 		id = cat.ParentID
 	}
 	return names
+}
+
+func applyListingOverrides(params *publishParams, listingTitle string, mainImages []string) error {
+	if title := cleanGeneratedTitle(listingTitle); title != "" {
+		if douyinTitleWeight(title) < 16 {
+			return errors.New("电商标题太短")
+		}
+		params.Title = title
+	}
+	if mainImages == nil {
+		return nil
+	}
+	mains := uniqueNonEmpty(mainImages)
+	if len(mains) == 0 {
+		return errors.New("请至少保留一张主图")
+	}
+	if len(mains) > 5 {
+		mains = mains[:5]
+	}
+	params.MainImages = mains
+	return nil
 }
 
 func buildPublishParams(p *dto.ProductDTO, shop *agentscenter.ShopItem, path []string, skuOnly bool) (*publishParams, error) {

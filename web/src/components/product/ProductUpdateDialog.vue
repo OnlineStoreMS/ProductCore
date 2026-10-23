@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { fetchPublishShops, startProductPublishUpdate, suggestListingTitle, type PublishShop } from '../../api/product'
+import { fetchPublishShops, startProductPublishUpdate, type PublishShop } from '../../api/product'
+import ListingPrepareFields from './ListingPrepareFields.vue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -16,8 +17,9 @@ const emit = defineEmits<{
 
 const loading = ref(false)
 const starting = ref(false)
-const generating = ref(false)
 const listingTitle = ref('')
+const mainImages = ref<string[]>([])
+const imagesReady = ref(false)
 const hint = ref('')
 const shops = ref<PublishShop[]>([])
 const selected = ref('')
@@ -60,7 +62,6 @@ async function load() {
   platformProductId.value = ''
   filledFromShop.value = ''
   scope.value = 'all'
-  listingTitle.value = ''
   try {
     const data = await fetchPublishShops(props.productId)
     shops.value = data.list || []
@@ -71,20 +72,6 @@ async function load() {
     ElMessage.error((e as Error).message || '读取店铺失败')
   } finally {
     loading.value = false
-  }
-}
-
-async function generateTitle() {
-  if (!props.productId) return
-  generating.value = true
-  try {
-    const data = await suggestListingTitle(props.productId)
-    listingTitle.value = data.title || ''
-    if (!listingTitle.value) ElMessage.warning('没有生成标题')
-  } catch (e) {
-    ElMessage.error((e as Error).message || '生成标题失败')
-  } finally {
-    generating.value = false
   }
 }
 
@@ -101,13 +88,15 @@ async function start() {
   }
   starting.value = true
   try {
-    const title = scope.value === 'all' ? listingTitle.value.trim() : ''
+    const usePrepared = scope.value === 'all'
+    const title = usePrepared ? listingTitle.value.trim() : ''
     const res = await startProductPublishUpdate(props.productId, {
       platform: shop.platform,
       platformShopId: shop.platformShopId,
       platformProductId: productNo,
       scope: scope.value,
       title: title || undefined,
+      mainImages: usePrepared && imagesReady.value ? mainImages.value : undefined,
     })
     ElMessage.success(
       scope.value === 'sku'
@@ -136,21 +125,17 @@ async function start() {
   <el-dialog
     :model-value="modelValue"
     title="更新铺货"
-    width="520px"
+    width="780px"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <div class="listing-title">
-      <div class="old-title-row">
-        <p class="publish-product">{{ productName }}</p>
-        <el-button size="small" :loading="generating" @click="generateTitle">AI 生成标题</el-button>
-      </div>
-      <el-input
-        v-model="listingTitle"
-        type="textarea"
-        :rows="2"
-        placeholder="新标题显示在这里，可修改"
-      />
-    </div>
+    <ListingPrepareFields
+      :active="modelValue"
+      :product-id="productId"
+      :product-name="productName"
+      v-model:title="listingTitle"
+      v-model:images="mainImages"
+      v-model:ready="imagesReady"
+    />
     <div v-loading="loading" class="publish-shops">
       <el-empty v-if="!loading && !shops.length" :description="hint || '没有在线的电商店铺'" />
       <el-radio-group v-else v-model="selected" class="publish-list">
@@ -184,7 +169,7 @@ async function start() {
           <el-radio value="sku">只更新商品规格</el-radio>
         </el-radio-group>
         <p v-if="scope === 'sku'" class="publish-hint">只重填规格、规格图和价格库存。标题、主图、详情图和发货时间保持不动。</p>
-        <p v-else class="publish-hint">上面如果填了新标题，这次会用新标题覆盖店铺商品。</p>
+        <p v-else class="publish-hint">填了新标题就用新标题。主图按上面的顺序，最多取前 5 张。</p>
       </div>
     </div>
     <template #footer>
@@ -197,14 +182,9 @@ async function start() {
 </template>
 
 <style scoped>
-.publish-product {
-  margin: 0;
-  color: #303133;
-  line-height: 1.5;
-}
-
 .publish-shops {
   min-height: 160px;
+  margin-top: 16px;
 }
 
 .publish-list {
@@ -246,27 +226,11 @@ async function start() {
 }
 
 .product-id,
-.update-scope,
-.listing-title {
+.update-scope {
   display: flex;
   flex-direction: column;
   gap: 6px;
   margin-top: 16px;
   color: #303133;
-}
-
-.listing-title {
-  margin-top: 0;
-}
-
-.old-title-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.old-title-row .publish-product {
-  flex: 1;
 }
 </style>
