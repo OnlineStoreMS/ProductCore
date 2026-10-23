@@ -9,6 +9,8 @@ const props = defineProps<{
   active: boolean
   productId?: number
   productName?: string
+  initialPic?: string
+  initialAlbum?: string[]
 }>()
 
 const title = defineModel<string>('title', { default: '' })
@@ -38,9 +40,12 @@ watch(
   ([active, id]) => {
     if (!active || !id) return
     title.value = ''
-    ready.value = false
+    const seeded = productMainImages(props.initialPic, props.initialAlbum)
+    images.value = seeded
+    ready.value = seeded.length > 0
     void loadImages(id)
   },
+  { immediate: true },
 )
 
 function productMainImages(pic?: string, album?: string[]) {
@@ -57,17 +62,17 @@ function productMainImages(pic?: string, album?: string[]) {
 }
 
 async function loadImages(id: number) {
-  loadingImages.value = true
-  images.value = []
+  loadingImages.value = images.value.length === 0
   try {
     const product = await fetchProduct(id)
-    if (props.productId !== id) return
+    if (!props.active || props.productId !== id) return
     images.value = productMainImages(product.pic, product.albumPics)
     ready.value = true
   } catch (e) {
-    images.value = []
-    ready.value = false
-    ElMessage.error((e as Error).message || '读取主图失败')
+    if (!images.value.length) {
+      ready.value = false
+      ElMessage.error((e as Error).message || '读取主图失败')
+    }
   } finally {
     loadingImages.value = false
   }

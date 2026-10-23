@@ -8,6 +8,8 @@ const props = defineProps<{
   modelValue: boolean
   productId?: number
   productName?: string
+  initialPic?: string
+  initialAlbum?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -132,6 +134,8 @@ async function start() {
       :active="modelValue"
       :product-id="productId"
       :product-name="productName"
+      :initial-pic="initialPic"
+      :initial-album="initialAlbum"
       v-model:title="listingTitle"
       v-model:images="mainImages"
       v-model:ready="imagesReady"

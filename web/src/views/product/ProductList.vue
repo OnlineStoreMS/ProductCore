@@ -197,18 +197,25 @@ function onSkuSaved(updated: ProductSkus) {
 const listingVisible = ref(false)
 const listingProductId = ref<number>()
 const listingProductName = ref('')
+const listingPic = ref('')
+const listingAlbum = ref<string[]>([])
 
-function handlePublish(row: Product) {
+function openListing(row: Product) {
   listingProductId.value = row.id
   listingProductName.value = row.name
-  listingVisible.value = true
+  listingPic.value = row.pic || ''
+  listingAlbum.value = row.albumPics || []
 }
 
 const updateVisible = ref(false)
 
+function handlePublish(row: Product) {
+  openListing(row)
+  listingVisible.value = true
+}
+
 function handleUpdatePublish(row: Product) {
-  listingProductId.value = row.id
-  listingProductName.value = row.name
+  openListing(row)
   updateVisible.value = true
 }
 
@@ -413,12 +420,16 @@ function onPublishStarted(payload: {
       v-model="listingVisible"
       :product-id="listingProductId"
       :product-name="listingProductName"
+      :initial-pic="listingPic"
+      :initial-album="listingAlbum"
       @started="onPublishStarted"
     />
     <ProductUpdateDialog
       v-model="updateVisible"
       :product-id="listingProductId"
       :product-name="listingProductName"
+      :initial-pic="listingPic"
+      :initial-album="listingAlbum"
       @started="onPublishStarted"
     />
   </div>

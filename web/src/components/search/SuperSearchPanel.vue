@@ -90,9 +90,12 @@ function openSkuManage(item: SuperSearchItem) {
   panelOpen.value = false
 }
 
+const listingPic = ref('')
+
 function openListing(item: SuperSearchItem) {
   listingProductId.value = item.productId
   listingProductName.value = item.productName
+  listingPic.value = item.productPic || item.pic || ''
   listingVisible.value = true
   panelOpen.value = false
 }
@@ -102,6 +105,7 @@ const updateVisible = ref(false)
 function openUpdate(item: SuperSearchItem) {
   listingProductId.value = item.productId
   listingProductName.value = item.productName
+  listingPic.value = item.productPic || item.pic || ''
   updateVisible.value = true
   panelOpen.value = false
 }
@@ -246,12 +250,14 @@ onUnmounted(() => {
       v-model="listingVisible"
       :product-id="listingProductId"
       :product-name="listingProductName"
+      :initial-pic="listingPic"
       @started="onPublishStarted"
     />
     <ProductUpdateDialog
       v-model="updateVisible"
       :product-id="listingProductId"
       :product-name="listingProductName"
+      :initial-pic="listingPic"
       @started="onPublishStarted"
     />
   </div>
