@@ -11,8 +11,19 @@
       if (bar) {
         const btn = clickLabel(ev.target);
         if (!btn || /标题|链\+标/.test(btn)) {
-          const title = zzbStoredTitle() || titleNearBar(bar) || extractZzbTitle();
-          report({ clickedTitle: true, title: title || undefined, fromZzb: true });
+          const pageTitle = titleNearBar(bar) || extractZzbTitle();
+          const stored = harvestZzbStore();
+          const pageId = pageItemId();
+          const sameItem = stored.zzbItemId && pageId && stored.zzbItemId === pageId;
+          const title = pageTitle || (sameItem ? stored.storedTitle : "");
+          report({
+            clickedTitle: true,
+            title: title || undefined,
+            titleFromPage: !!pageTitle,
+            zzbItemId: stored.zzbItemId || undefined,
+            itemId: pageId || undefined,
+            fromZzb: true,
+          });
         }
         return;
       }
@@ -38,7 +49,7 @@
       } catch (e) {}
       if (!text && window.getSelection) text = String(window.getSelection());
       const title = titleFromCopiedText(text);
-      if (title) report({ title: title, fromZzb: true, clickedTitle: true });
+      if (title) report({ title: title, titleFromPage: true, clickedTitle: true, itemId: pageItemId() || undefined });
     },
     true
   );
@@ -48,7 +59,7 @@
   if (isTop && /item\.taobao\.com|detail\.tmall\.com/i.test(href)) {
     report({
       resetSession: true,
-      itemId: (href.match(/[?&]id=(\d+)/) || [])[1] || "",
+      itemId: pageItemId(),
       url: href,
       platform: /tmall/i.test(href) ? "tmall" : "taobao",
     });
@@ -56,27 +67,37 @@
   }
   scan();
 
+  function pageItemId() {
+    let target = href;
+    try {
+      if (window.top && window.top !== window) target = window.top.location.href || target;
+    } catch (e) {}
+    return (String(target || "").match(/[?&]id=(\d+)/) || [])[1] || "";
+  }
+
   function scan() {
     const payload = {
       platform: /tmall/i.test(href) ? "tmall" : "taobao",
     };
-    if (/item\.taobao\.com|detail\.tmall\.com/i.test(href)) {
-      payload.url = href;
-    }
-    const id = (href.match(/[?&]id=(\d+)/) || [])[1] || "";
-    if (id) payload.itemId = id;
+    const pageId = pageItemId();
+    if (/item\.taobao\.com|detail\.tmall\.com/i.test(href)) payload.url = href;
+    if (pageId) payload.itemId = pageId;
     const stored = harvestZzbStore();
     const tableSkus = extractSkus();
-    const skus = mergeSkuRows(stored.skus, tableSkus);
-    if (stored.fromZzbStore || skus.length) {
+    // 至尊宝把标题和 SKU 写在站点共用的 localStorage 里。多个商品页会读到同一份，只接受和当前商品 ID 一致的那份。
+    const storeOk = !!stored.zzbItemId && (!pageId || stored.zzbItemId === pageId);
+    if (stored.fromZzbStore && storeOk) {
       payload.fromZzbStore = true;
-      if (stored.zzbItemId) payload.zzbItemId = stored.zzbItemId;
+      payload.zzbItemId = stored.zzbItemId;
       payload.images = stored.images;
       payload.videos = stored.videos;
-      payload.skus = skus;
+      payload.skus = mergeSkuRows(stored.skus, tableSkus);
+      if (stored.storedTitle) payload.zzbTitle = stored.storedTitle;
+    } else if (tableSkus.length && pageId) {
+      payload.replaceSkus = true;
+      payload.skus = tableSkus;
     }
-    if (stored.storedTitle) payload.zzbTitle = stored.storedTitle;
-    if (payload.fromZzbStore || payload.itemId || payload.url) {
+    if (payload.fromZzbStore || payload.replaceSkus || payload.itemId || payload.url) {
       report(payload);
     }
   }

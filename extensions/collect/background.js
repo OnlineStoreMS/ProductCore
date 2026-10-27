@@ -61,6 +61,12 @@ function mergeHarvest(tabId, incoming) {
   if (incoming.itemId && cur.itemId && incoming.itemId !== cur.itemId) {
     cur = emptyState();
   }
+  if (incoming.itemId) cur.itemId = incoming.itemId;
+  if (incoming.url && /item\.taobao|detail\.tmall/i.test(incoming.url)) cur.url = incoming.url;
+  if (incoming.platform && incoming.url && /item\.taobao|detail\.tmall/i.test(incoming.url)) {
+    cur.platform = incoming.platform;
+  }
+  const trusted = storeMatchesPage(cur, incoming);
   if (incoming.clickedTitle) cur.clickedTitle = true;
   const applyTitle = (raw) => {
     const next = String(raw || "")
@@ -71,32 +77,42 @@ function mergeHarvest(tabId, incoming) {
     if (isJunkTitle(next)) return;
     if (!cur.title || isJunkTitle(cur.title) || incoming.clickedTitle) cur.title = next;
   };
-  if (incoming.title && incoming.clickedTitle) applyTitle(incoming.title);
-  if (incoming.zzbTitle && cur.clickedTitle) {
+  if (incoming.title && incoming.clickedTitle && (incoming.titleFromPage || trusted)) applyTitle(incoming.title);
+  if (incoming.zzbTitle && cur.clickedTitle && trusted) {
     const next = String(incoming.zzbTitle)
       .replace(/[\uE000-\uF8FF]/g, "")
       .replace(/\s+/g, " ")
       .trim();
     if (!isJunkTitle(next) && next.length >= 8) cur.title = next;
   }
-  if (incoming.itemId) cur.itemId = incoming.itemId;
-  if (incoming.url && /item\.taobao|detail\.tmall/i.test(incoming.url)) cur.url = incoming.url;
-  if (incoming.platform && incoming.url && /item\.taobao|detail\.tmall/i.test(incoming.url)) {
-    cur.platform = incoming.platform;
+  if (incoming.clickedMedia) cur.clickedMedia = true;
+  if (incoming.clickedSku) cur.clickedSku = true;
+  if (incoming.clickedTitle) cur.clickedTitle = true;
+  // 主图/视频跟「手机端主图视频SKU」走 fileList_tb，点完就收，不等 SKU 工具。
+  // 视频整表覆盖（包括空数组），避免没视频的商品沿用上一件 mp4。
+  if (trusted && cur.clickedMedia && incoming.fromZzbStore) {
+    if (Array.isArray(incoming.images) && incoming.images.length) cur.images = incoming.images;
+    if (Array.isArray(incoming.videos)) cur.videos = incoming.videos;
   }
-    if (incoming.clickedMedia) cur.clickedMedia = true;
-    if (incoming.clickedSku) cur.clickedSku = true;
-    if (incoming.clickedTitle) cur.clickedTitle = true;
-    // 主图/视频跟「手机端主图视频SKU」走 fileList_tb，点完就收，不等 SKU 工具。
-    // 视频整表覆盖（包括空数组），避免没视频的商品沿用上一件 mp4。
-    if (cur.clickedMedia && incoming.fromZzbStore) {
-      if (Array.isArray(incoming.images) && incoming.images.length) cur.images = incoming.images;
-      if (Array.isArray(incoming.videos)) cur.videos = incoming.videos;
-    }
-    if (cur.clickedSku && incoming.fromZzbStore && Array.isArray(incoming.skus) && incoming.skus.length) {
-      cur.skus = mergeSkuState(cur.skus, incoming.skus);
-    }
+  // SKU 用当前这一份整表替换，不再把上一件或别的标签页里的规格并进来。
+  if (
+    trusted &&
+    cur.clickedSku &&
+    Array.isArray(incoming.skus) &&
+    incoming.skus.length &&
+    (incoming.fromZzbStore || incoming.replaceSkus)
+  ) {
+    cur.skus = incoming.skus;
+  }
   tabState.set(tabId, cur);
+}
+
+function storeMatchesPage(cur, incoming) {
+  if (incoming.replaceSkus && !incoming.fromZzbStore && !incoming.zzbItemId) return true;
+  if (!incoming.fromZzbStore && !incoming.zzbTitle && !incoming.zzbItemId) return false;
+  const zzb = String(incoming.zzbItemId || "");
+  const page = String(incoming.itemId || (cur && cur.itemId) || "");
+  return !!(zzb && page && zzb === page);
 }
 
 function mergeSkuState(oldList, nextList) {
