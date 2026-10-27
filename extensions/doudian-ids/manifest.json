@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "抖店商品ID导出",
+  "version": "0.1.0",
+  "description": "在抖店商品管理列表自动翻页，导出全部商品ID（逗号拼接）。",
+  "action": {
+    "default_title": "抖店商品ID导出",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://fxg.jinritemai.com/ffa/g/*"],
+      "js": ["content.js"],
+      "css": ["panel.css"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ]
+}

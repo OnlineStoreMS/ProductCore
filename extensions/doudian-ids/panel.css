@@ -1,0 +1,100 @@
+#pc-doudian-ids {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483646;
+  width: 380px;
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 13px;
+  color: #1f2937;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+}
+
+#pc-doudian-ids header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #111827;
+  color: #fff;
+  font-weight: 600;
+}
+
+#pc-doudian-ids header button {
+  border: 0;
+  background: transparent;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+#pc-doudian-ids .body {
+  padding: 12px;
+}
+
+#pc-doudian-ids .hint {
+  color: #4b5563;
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+#pc-doudian-ids .meta {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
+#pc-doudian-ids .meta.ok {
+  color: #047857;
+}
+
+#pc-doudian-ids .meta.wait {
+  color: #b45309;
+}
+
+#pc-doudian-ids .meta.err {
+  color: #b91c1c;
+}
+
+#pc-doudian-ids .row {
+  display: flex;
+  gap: 8px;
+}
+
+#pc-doudian-ids button.act {
+  flex: 1;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#pc-doudian-ids button.act:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+#pc-doudian-ids button.secondary {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+#pc-doudian-ids textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 120px;
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  resize: vertical;
+  font-size: 12px;
+  line-height: 1.4;
+}
