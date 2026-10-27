@@ -41,6 +41,7 @@ const specFind = ref('')
 const specReplaceTo = ref('')
 const specReplaceColumn = ref<string>()
 const priceAdjust = ref('')
+const selectedKeys = ref<string[]>([])
 const csvInputRef = ref<HTMLInputElement>()
 const importing = ref(false)
 
@@ -93,7 +94,7 @@ const dialogWidth = computed(() => {
     (sum, name) => sum + (specColumnWidths.value[name] || 80),
     0,
   )
-  const base = 64 + skuCodeColWidth.value + 120 + 100 + 48
+  const base = 64 + 42 + skuCodeColWidth.value + 120 + 100 + 48
   return `${Math.min(Math.max(720, base + specSum), 960)}px`
 })
 
@@ -124,6 +125,18 @@ function openSkuPicPreview(url: string) {
   skuPreviewPic.value = url
   skuPreviewVisible.value = true
 }
+
+function skuRowKey(sku: SkuItem) {
+  if (sku.id) return `id:${sku.id}`
+  const spec = specColumns.value.map((name) => sku.specs?.[name] || '').join('\u0001')
+  return `code:${sku.skuCode || ''}|${spec}`
+}
+
+const priceAdjustScope = computed(() => {
+  if (selectedKeys.value.length) return `（已选 ${selectedKeys.value.length}）`
+  if (keyword.value.trim()) return '（当前筛选）'
+  return ''
+})
 
 const filteredSkus = computed(() => {
   const q = keyword.value.trim().toLowerCase()
@@ -160,6 +173,7 @@ async function loadProduct() {
   specReplaceTo.value = ''
   specReplaceColumn.value = undefined
   priceAdjust.value = ''
+  selectedKeys.value = []
   try {
     const p = await fetchProductSkus(props.productId)
     product.value = p
@@ -351,15 +365,22 @@ function applySpecReplace() {
   ElMessage.success(`已更新 ${scope}${changed} 条 SKU 的规格值，请确认后保存`)
 }
 
+function onSkuSelectionChange(rows: SkuItem[]) {
+  selectedKeys.value = rows.map((sku) => skuRowKey(sku))
+}
+
 function applyPriceAdjust() {
   const op = parsePriceAdjust(priceAdjust.value)
   if (!op) {
     ElMessage.warning('销售价请按 +5、-5 或 *120% 填写')
     return
   }
-  const targets = filteredSkus.value
+  const picked = new Set(selectedKeys.value)
+  const targets = picked.size
+    ? skus.value.filter((sku) => picked.has(skuRowKey(sku)))
+    : filteredSkus.value
   if (!targets.length) {
-    ElMessage.info('没有可调整的 SKU')
+    ElMessage.info(picked.size ? '没有勾选可调整的 SKU' : '没有可调整的 SKU')
     return
   }
   const targetSet = new Set(targets)
@@ -367,8 +388,8 @@ function applyPriceAdjust() {
     if (!targetSet.has(sku)) return sku
     return { ...sku, price: op(Number(sku.price) || 0) }
   })
-  const scope = keyword.value.trim() ? '当前筛选中 ' : ''
-  ElMessage.success(`已调整 ${scope}${targets.length} 条销售价，请确认后保存`)
+  const scope = picked.size ? '已选的 ' : keyword.value.trim() ? '当前筛选中的 ' : ''
+  ElMessage.success(`已调整${scope}${targets.length} 条销售价，请确认后保存`)
 }
 
 function applyBatch() {
@@ -546,7 +567,7 @@ watch(
         </el-button>
         <el-input v-model="priceAdjust" placeholder="+5、-5、*120%" class="batch-input batch-input--op" />
         <el-button type="primary" class="batch-btn" @click="applyPriceAdjust">
-          调整销售价{{ keyword.trim() ? '（当前筛选）' : '' }}
+          调整销售价{{ priceAdjustScope }}
         </el-button>
       </div>
 
@@ -570,7 +591,10 @@ watch(
           size="small"
           class="sku-table"
           max-height="420"
+          :row-key="skuRowKey"
+          @selection-change="onSkuSelectionChange"
         >
+          <el-table-column type="selection" width="42" reserve-selection />
           <el-table-column label="图片" width="64" align="center" class-name="col-sku-preview">
             <template #default="{ row }">
               <div v-if="resolveSkuPic(row)" class="sku-preview">
