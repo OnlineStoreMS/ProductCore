@@ -60,10 +60,13 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 	platformTypeH := admin.NewPlatformTypeHandler(platformTypeSvc)
 	platformShopH := admin.NewPlatformShopHandler(platformShopSvc, listingSvc)
 	uploadH := admin.NewUploadHandler(store)
+	aiSettingSvc := service.NewAISettingService(repos, aiClient)
+	aiSettingH := admin.NewAISettingHandler(aiSettingSvc)
 	aiImageH := admin.NewAIImageHandler(
 		aiClient,
 		imageerase.NewClient(cfg.Integrations.ImageEraseURL),
 		store,
+		aiSettingSvc,
 	)
 	collectH := admin.NewProductCollectHandler(service.NewProductCollectService(
 		repos,
@@ -84,13 +87,13 @@ func Setup(db *gorm.DB, cfg *config.Config, rdb *redis.Client, store storage.Sto
 	adminGroup := v1.Group("/admin")
 	jwtMgr := jwtmgr.NewManager(cfg.Auth.JWTSecret)
 	adminGroup.Use(adminmw.AdminAuth(&cfg.Auth, jwtMgr))
-	admin.RegisterRoutes(adminGroup, productH, brandH, categoryH, groupH, keywordH, uploadH, importH, platformTypeH, platformShopH, collectH, distributionH, aiImageH)
+	admin.RegisterRoutes(adminGroup, productH, brandH, categoryH, groupH, keywordH, uploadH, importH, platformTypeH, platformShopH, collectH, distributionH, aiImageH, aiSettingH)
 
 	openapi.RegisterRoutes(v1.Group("/open"), openProductH, openCategoryH)
 
 	legacy := v1.Group("")
 	legacy.Use(adminmw.AdminAuth(&cfg.Auth, jwtMgr))
-	admin.RegisterRoutes(legacy, productH, brandH, categoryH, groupH, keywordH, uploadH, importH, platformTypeH, platformShopH, collectH, distributionH, aiImageH)
+	admin.RegisterRoutes(legacy, productH, brandH, categoryH, groupH, keywordH, uploadH, importH, platformTypeH, platformShopH, collectH, distributionH, aiImageH, aiSettingH)
 
 	return r
 }

@@ -17,6 +17,7 @@ func RegisterRoutes(
 	collectH *ProductCollectHandler,
 	distributionH *DistributionHandler,
 	aiImageH *AIImageHandler,
+	aiSettingH *AISettingHandler,
 ) {
 	g.GET("/products", productH.List)
 	g.GET("/super-search", productH.SuperSearch)
@@ -81,6 +82,9 @@ func RegisterRoutes(
 	g.POST("/ai/images/retouch", aiImageH.Retouch)
 	g.POST("/ai/images/erase/snap", aiImageH.Snap)
 	g.POST("/ai/images/erase", aiImageH.Erase)
+	g.GET("/ai/settings", aiSettingH.Get)
+	g.PUT("/ai/settings", aiSettingH.Update)
+	g.GET("/ai/image-models", aiSettingH.ListImageModels)
 
 	g.GET("/platform-types", platformTypeH.List)
 	g.GET("/platform-types/enabled", platformTypeH.ListEnabled)

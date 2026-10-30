@@ -1,7 +1,14 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElImageViewer, ElMessage } from 'element-plus'
-import { retouchProductImage } from '../../api/ai'
+import {
+  fetchAIImageModels,
+  fetchAISetting,
+  imageModelKey,
+  imageModelLabel,
+  retouchProductImage,
+  type AIImageModel,
+} from '../../api/ai'
 import type { UploadContext } from '../../api/upload'
 import ImageFileMeta from './ImageFileMeta.vue'
 
@@ -22,6 +29,39 @@ const prompt = ref('')
 const resultUrl = ref('')
 const busy = ref(false)
 const previewUrl = ref('')
+const models = ref<AIImageModel[]>([])
+const selectedModel = ref('')
+const loadingModels = ref(false)
+
+const modelOptions = computed(() =>
+  models.value.map((item) => ({
+    value: imageModelKey(item),
+    label: imageModelLabel(item),
+  })),
+)
+
+async function loadModels() {
+  loadingModels.value = true
+  try {
+    const [list, cfg] = await Promise.all([fetchAIImageModels(), fetchAISetting()])
+    models.value = list || []
+    const matched =
+      models.value.find(
+        (item) =>
+          item.modelId === cfg.defaultImageModel &&
+          (!cfg.defaultImageConnectionId || item.connectionId === cfg.defaultImageConnectionId),
+      ) ||
+      models.value.find((item) => item.modelId === cfg.defaultImageModel) ||
+      models.value[0]
+    selectedModel.value = matched ? imageModelKey(matched) : ''
+  } catch (e) {
+    models.value = []
+    selectedModel.value = ''
+    ElMessage.error(errorText(e))
+  } finally {
+    loadingModels.value = false
+  }
+}
 
 watch(
   () => props.modelValue,
@@ -31,6 +71,7 @@ watch(
     resultUrl.value = ''
     busy.value = false
     previewUrl.value = ''
+    void loadModels()
   },
 )
 
@@ -49,11 +90,18 @@ async function run() {
     ElMessage.warning('没有原图')
     return
   }
+  const model = models.value.find((item) => imageModelKey(item) === selectedModel.value)
+  if (!model && models.value.length) {
+    ElMessage.warning('请选择图片模型')
+    return
+  }
   busy.value = true
   try {
     const data = await retouchProductImage({
       imageUrl: props.source,
       prompt: text,
+      model: model?.modelId,
+      connectionId: model?.connectionId,
       scope: props.uploadContext?.scope,
       resource: props.uploadContext?.resource,
       productId: props.uploadContext?.productId,
@@ -94,6 +142,15 @@ async function run() {
       </div>
       <aside class="tool">
         <div class="tool-title">AI 修图</div>
+        <el-select
+          v-model="selectedModel"
+          filterable
+          placeholder="选择图片模型"
+          :loading="loadingModels"
+          :disabled="busy || !modelOptions.length"
+        >
+          <el-option v-for="item in modelOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
         <el-input
           v-model="prompt"
           type="textarea"

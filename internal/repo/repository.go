@@ -16,6 +16,7 @@ type Repos struct {
 	Distribution       *DistributionRepo
 	DistributionConfig *DistributionConfigRepo
 	ProductPublish     *ProductPublishRepo
+	AISetting          *AISettingRepo
 }
 
 func New(db *gorm.DB) *Repos {
@@ -32,5 +33,6 @@ func New(db *gorm.DB) *Repos {
 		Distribution:       NewDistributionRepo(db),
 		DistributionConfig: NewDistributionConfigRepo(db),
 		ProductPublish:     NewProductPublishRepo(db),
+		AISetting:          NewAISettingRepo(db),
 	}
 }

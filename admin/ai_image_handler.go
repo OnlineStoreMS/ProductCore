@@ -19,19 +19,21 @@ import (
 	"productcore/internal/pkg/authcontext"
 	"productcore/internal/pkg/imagesize"
 	"productcore/internal/pkg/response"
+	"productcore/internal/service"
 	"productcore/internal/storage"
 
 	"github.com/gin-gonic/gin"
 )
 
 type AIImageHandler struct {
-	client *aimodel.Client
-	erase  *imageerase.Client
-	store  storage.Storage
+	client   *aimodel.Client
+	erase    *imageerase.Client
+	store    storage.Storage
+	settings *service.AISettingService
 }
 
-func NewAIImageHandler(client *aimodel.Client, erase *imageerase.Client, store storage.Storage) *AIImageHandler {
-	return &AIImageHandler{client: client, erase: erase, store: store}
+func NewAIImageHandler(client *aimodel.Client, erase *imageerase.Client, store storage.Storage, settings *service.AISettingService) *AIImageHandler {
+	return &AIImageHandler{client: client, erase: erase, store: store, settings: settings}
 }
 
 // Retouch godoc
@@ -87,16 +89,30 @@ func (h *AIImageHandler) Retouch(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 170*time.Second)
 	defer cancel()
+	tenantID := authcontext.TenantID(c)
+	modelName := strings.TrimSpace(body.Model)
+	connID := body.ConnectionID
+	if h.settings != nil {
+		resolved, resolvedConn, err := h.settings.ForTenant(tenantID).ResolveRetouchModel(ctx, modelName, connID)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		modelName = resolved
+		connID = resolvedConn
+	}
 	size, err := retouchOutputSize(ctx, h.store, imageURL)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	remote, err := h.client.Retouch(ctx, aimodel.RetouchInput{
-		TenantID: authcontext.TenantID(c),
-		Prompt:   prompt,
-		ImageURL: imageURL,
-		Size:     size,
+		TenantID:     tenantID,
+		Model:        modelName,
+		ConnectionID: connID,
+		Prompt:       prompt,
+		ImageURL:     imageURL,
+		Size:         size,
 	})
 	if err != nil {
 		response.Fail(c, http.StatusBadGateway, err.Error())

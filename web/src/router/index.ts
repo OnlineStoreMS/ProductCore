@@ -38,6 +38,7 @@ const router = createRouter({
         { path: 'distribution-shops', name: 'DistributionShopList', component: () => import('../views/distribution/DistributionShopList.vue'), meta: { title: '铺货店铺' } },
         { path: 'distribution-configs', name: 'DistributionConfig', component: () => import('../views/distribution/DistributionConfig.vue'), meta: { title: '铺货配置' } },
         { path: 'distribution-shops/:id', name: 'DistributionShopItems', component: () => import('../views/distribution/DistributionShopItems.vue'), meta: { title: '店铺商品' } },
+        { path: 'ai-settings', name: 'AISetting', component: () => import('../views/ai/AISetting.vue'), meta: { title: 'AI 修图' } },
       ],
     },
   ],

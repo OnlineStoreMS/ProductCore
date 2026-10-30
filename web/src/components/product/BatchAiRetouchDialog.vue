@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElImageViewer, ElMessage } from 'element-plus'
-import { retouchProductImage } from '../../api/ai'
+import {
+  fetchAIImageModels,
+  fetchAISetting,
+  imageModelKey,
+  imageModelLabel,
+  retouchProductImage,
+  type AIImageModel,
+} from '../../api/ai'
 import type { UploadContext } from '../../api/upload'
 import ImageFileMeta from './ImageFileMeta.vue'
 
@@ -35,7 +42,40 @@ const busy = ref(false)
 const progress = ref('')
 const previewUrl = ref('')
 const rows = ref<BatchRow[]>([])
+const models = ref<AIImageModel[]>([])
+const selectedModel = ref('')
+const loadingModels = ref(false)
 let runId = 0
+
+const modelOptions = computed(() =>
+  models.value.map((item) => ({
+    value: imageModelKey(item),
+    label: imageModelLabel(item),
+  })),
+)
+
+async function loadModels() {
+  loadingModels.value = true
+  try {
+    const [list, cfg] = await Promise.all([fetchAIImageModels(), fetchAISetting()])
+    models.value = list || []
+    const matched =
+      models.value.find(
+        (item) =>
+          item.modelId === cfg.defaultImageModel &&
+          (!cfg.defaultImageConnectionId || item.connectionId === cfg.defaultImageConnectionId),
+      ) ||
+      models.value.find((item) => item.modelId === cfg.defaultImageModel) ||
+      models.value[0]
+    selectedModel.value = matched ? imageModelKey(matched) : ''
+  } catch (e) {
+    models.value = []
+    selectedModel.value = ''
+    ElMessage.error(errorText(e))
+  } finally {
+    loadingModels.value = false
+  }
+}
 
 watch(
   () => props.modelValue,
@@ -53,6 +93,7 @@ watch(
       resultUrl: '',
       error: '',
     }))
+    void loadModels()
   },
 )
 
@@ -85,6 +126,11 @@ async function run() {
     ElMessage.warning('请至少勾选一张图片')
     return
   }
+  const model = models.value.find((item) => imageModelKey(item) === selectedModel.value)
+  if (!model && models.value.length) {
+    ElMessage.warning('请选择图片模型')
+    return
+  }
   const id = ++runId
   busy.value = true
   let done = 0
@@ -100,6 +146,8 @@ async function run() {
         const data = await retouchProductImage({
           imageUrl: row.url,
           prompt: text,
+          model: model?.modelId,
+          connectionId: model?.connectionId,
           scope: row.uploadContext?.scope,
           resource: row.uploadContext?.resource,
           productId: row.uploadContext?.productId,
@@ -188,6 +236,15 @@ function replaceSelected() {
       </div>
       <aside class="tool">
         <div class="tool-title">AI 修图</div>
+        <el-select
+          v-model="selectedModel"
+          filterable
+          placeholder="选择图片模型"
+          :loading="loadingModels"
+          :disabled="busy || !modelOptions.length"
+        >
+          <el-option v-for="item in modelOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
         <el-input
           v-model="prompt"
           type="textarea"

@@ -30,10 +30,22 @@ func NewClient(baseURL, token string) *Client {
 }
 
 type RetouchInput struct {
-	TenantID uint64
-	Prompt   string
-	ImageURL string
-	Size     string
+	TenantID     uint64
+	Model        string
+	ConnectionID uint64
+	Prompt       string
+	ImageURL     string
+	Size         string
+}
+
+type ImageModel struct {
+	ID             uint64 `json:"id"`
+	ConnectionID   uint64 `json:"connectionId"`
+	ConnectionName string `json:"connectionName"`
+	ProviderCode   string `json:"providerCode"`
+	ModelID        string `json:"modelId"`
+	DisplayName    string `json:"displayName"`
+	IsDefault      int    `json:"isDefault"`
 }
 
 type retouchResponse struct {
@@ -45,16 +57,60 @@ type retouchResponse struct {
 	} `json:"data"`
 }
 
+func (c *Client) ListImageModels(ctx context.Context, tenantID uint64) ([]ImageModel, error) {
+	if c == nil {
+		return nil, fmt.Errorf("未配置 AI 大模型")
+	}
+	url := fmt.Sprintf("%s/api/v1/internal/models?tenantId=%d&capability=image", c.BaseURL, tenantID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-Internal-Token", c.Token)
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("读取图片模型失败")
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	var body struct {
+		Code    int          `json:"code"`
+		Message string       `json:"message"`
+		Data    []ImageModel `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return nil, fmt.Errorf("图片模型返回异常")
+	}
+	if resp.StatusCode >= 300 || body.Code >= 300 {
+		msg := strings.TrimSpace(body.Message)
+		if msg == "" {
+			msg = "读取图片模型失败"
+		}
+		return nil, fmt.Errorf("%s", msg)
+	}
+	if body.Data == nil {
+		return []ImageModel{}, nil
+	}
+	return body.Data, nil
+}
+
 func (c *Client) Retouch(ctx context.Context, in RetouchInput) (string, error) {
 	if c == nil {
 		return "", fmt.Errorf("AI 修图未配置")
 	}
+	model := strings.TrimSpace(in.Model)
+	if model == "" {
+		model = "qwen-image-3.0"
+	}
 	payload := map[string]any{
 		"tenantId":  in.TenantID,
 		"callerApp": "productcore",
-		"model":     "qwen-image-3.0",
+		"model":     model,
 		"prompt":    in.Prompt,
 		"imageUrl":  in.ImageURL,
+	}
+	if in.ConnectionID > 0 {
+		payload["connectionId"] = in.ConnectionID
 	}
 	if size := strings.TrimSpace(in.Size); size != "" {
 		payload["size"] = size

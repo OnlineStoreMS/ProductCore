@@ -56,6 +56,7 @@ const menuItems: MenuEntry[] = [
     children: [
       { path: '/categories', title: '商品分类', icon: MenuIcon },
       { path: '/brands', title: '品牌管理', icon: Collection },
+      { path: '/ai-settings', title: 'AI 修图', icon: Setting },
     ],
   },
 ]
@@ -64,7 +65,7 @@ function openKeysForPath(path: string): string[] {
   if (path.startsWith('/products') || path.startsWith('/groups') || path.startsWith('/keywords') || path.startsWith('/product-collect')) return ['商品管理']
   if (path.startsWith('/distribution')) return ['铺货管理']
   if (path.startsWith('/platform')) return ['渠道管理']
-  if (path.startsWith('/categories') || path.startsWith('/brands')) return ['基础数据']
+  if (path.startsWith('/categories') || path.startsWith('/brands') || path.startsWith('/ai-settings')) return ['基础数据']
   return []
 }
 
