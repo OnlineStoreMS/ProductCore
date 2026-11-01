@@ -94,9 +94,14 @@ func (c *Client) ListImageModels(ctx context.Context, tenantID uint64) ([]ImageM
 	return body.Data, nil
 }
 
-func (c *Client) Retouch(ctx context.Context, in RetouchInput) (string, error) {
+type RetouchResult struct {
+	URL     string
+	B64JSON string
+}
+
+func (c *Client) Retouch(ctx context.Context, in RetouchInput) (*RetouchResult, error) {
 	if c == nil {
-		return "", fmt.Errorf("AI 修图未配置")
+		return nil, fmt.Errorf("AI 修图未配置")
 	}
 	model := strings.TrimSpace(in.Model)
 	if model == "" {
@@ -117,35 +122,40 @@ func (c *Client) Retouch(ctx context.Context, in RetouchInput) (string, error) {
 	}
 	buf, err := json.Marshal(payload)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/api/v1/internal/images", bytes.NewReader(buf))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Internal-Token", c.Token)
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("调用修图服务失败")
+		return nil, fmt.Errorf("调用修图服务失败")
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	// b64 结果可能较大，放到 20MB
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 20<<20))
 	var body retouchResponse
 	if err := json.Unmarshal(raw, &body); err != nil {
-		return "", fmt.Errorf("修图服务返回异常")
+		return nil, fmt.Errorf("修图服务返回异常")
 	}
 	if resp.StatusCode >= 300 || body.Code >= 300 {
 		msg := strings.TrimSpace(body.Message)
 		if msg == "" {
 			msg = "修图失败"
 		}
-		return "", fmt.Errorf("%s", msg)
+		return nil, fmt.Errorf("%s", msg)
 	}
-	if url := strings.TrimSpace(body.Data.URL); url != "" {
-		return url, nil
+	out := &RetouchResult{
+		URL:     strings.TrimSpace(body.Data.URL),
+		B64JSON: strings.TrimSpace(body.Data.B64JSON),
 	}
-	return "", fmt.Errorf("模型未返回图片")
+	if out.URL == "" && out.B64JSON == "" {
+		return nil, fmt.Errorf("模型未返回图片")
+	}
+	return out, nil
 }
 
 type ChatInput struct {

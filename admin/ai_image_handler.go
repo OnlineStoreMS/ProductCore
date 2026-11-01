@@ -118,12 +118,26 @@ func (h *AIImageHandler) Retouch(c *gin.Context) {
 		response.Fail(c, http.StatusBadGateway, err.Error())
 		return
 	}
-	stored, err := storage.UploadFromURL(h.store, remote, opts)
+	stored, err := storeRetouchResult(h.store, remote, opts)
 	if err != nil {
 		response.Fail(c, http.StatusBadGateway, "结果图保存失败")
 		return
 	}
 	response.OK(c, gin.H{"url": stored})
+}
+
+func storeRetouchResult(store storage.Storage, remote *aimodel.RetouchResult, opts storage.UploadOptions) (string, error) {
+	if remote == nil {
+		return "", fmt.Errorf("empty result")
+	}
+	// 优先 b64：Grok 临时链常无法被本机直连下载。
+	if b64 := strings.TrimSpace(remote.B64JSON); b64 != "" {
+		return storage.UploadBase64(store, b64, opts)
+	}
+	if url := strings.TrimSpace(remote.URL); url != "" {
+		return storage.UploadFromURL(store, url, opts)
+	}
+	return "", fmt.Errorf("empty result")
 }
 
 // Snap godoc
