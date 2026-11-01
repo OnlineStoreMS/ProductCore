@@ -142,6 +142,59 @@ func storeRetouchResult(store storage.Storage, remote *aimodel.RetouchResult, op
 
 // Snap godoc
 //
+// Find godoc
+//
+//	@Summary		OCR 识别文字并定位擦除框
+//	@Tags			admin-图片
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		dto.ImageEraseFindRequest	true	"原图与要擦除的文字"
+//	@Success		200		{object}	response.Body
+//	@Router			/admin/ai/images/erase/find [post]
+func (h *AIImageHandler) Find(c *gin.Context) {
+	if h.erase == nil {
+		response.Fail(c, http.StatusServiceUnavailable, "未配置图片擦除")
+		return
+	}
+	var body dto.ImageEraseFindRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Fail(c, http.StatusBadRequest, "参数不正确")
+		return
+	}
+	query := strings.TrimSpace(body.Query)
+	if query == "" {
+		response.Fail(c, http.StatusBadRequest, "请填写要擦除的文字")
+		return
+	}
+	raw, err := h.readSourceImage(c.Request.Context(), body.ImageURL)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 90*time.Second)
+	defer cancel()
+	kinds := strings.TrimSpace(body.Kinds)
+	if kinds == "" {
+		kinds = "text"
+	}
+	shape := strings.TrimSpace(body.Shape)
+	if shape == "" {
+		shape = "box"
+	}
+	out, err := h.erase.Find(ctx, raw, query, kinds, shape)
+	if err != nil {
+		response.Fail(c, http.StatusBadGateway, err.Error())
+		return
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(out, &payload); err != nil {
+		response.Fail(c, http.StatusBadGateway, "擦除服务返回异常")
+		return
+	}
+	response.OK(c, payload)
+}
+
 //	@Summary		图片擦除区域识别
 //	@Tags			admin-图片
 //	@Accept			json

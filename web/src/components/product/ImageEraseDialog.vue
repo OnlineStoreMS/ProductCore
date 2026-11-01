@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { eraseProductImage, snapProductImage } from '../../api/ai'
+import { eraseProductImage, findEraseRegions, snapProductImage } from '../../api/ai'
 import type { UploadContext } from '../../api/upload'
 
 type Limit = { box: number[]; polygon: number[][] | null }
@@ -23,6 +23,7 @@ const emit = defineEmits<{
   'update:index': [value: number]
   replace: [url: string]
   add: [url: string]
+  batchReplace: [rows: { index: number; url: string }[]]
 }>()
 
 const canvasRef = ref<HTMLCanvasElement>()
@@ -30,7 +31,7 @@ const wrapRef = ref<HTMLDivElement>()
 const shape = ref<'box' | 'contour'>('box')
 const angle = ref(0)
 const busy = ref(false)
-const status = ref('在图上框选或圈选后点擦除')
+const status = ref('在图上框选或圈选后点擦除；也可填文字 OCR 识别后框选')
 const zoomLabel = ref('100%')
 const workingUrl = ref('')
 const history = ref<string[]>([])
@@ -39,6 +40,8 @@ const limits = ref<Limit[]>([])
 const contours = ref<Array<number[][][] | null>>([])
 const shapes = ref<string[]>([])
 const labels = ref<string[]>([])
+const ocrQuery = ref('')
+const progress = ref('')
 
 let image: HTMLImageElement | null = null
 let zoom = 1
@@ -54,6 +57,7 @@ const undoLabel = computed(() => (history.value.length ? `撤销（${history.val
 const pageLabel = computed(() => `${props.index + 1} / ${Math.max(props.sources.length, 1)}`)
 const canPrev = computed(() => props.index > 0)
 const canNext = computed(() => props.index < props.sources.length - 1)
+const canBatch = computed(() => props.sources.length > 1)
 
 function currentSource() {
   return props.sources[props.index] || ''
@@ -505,6 +509,150 @@ async function shiftImage(delta: number) {
   emit('update:index', next)
 }
 
+function applyHits(hits: Array<{ text?: string; query?: string; box?: number[]; polygon?: number[][] | null; contours?: number[][][] | null; shape?: string }>) {
+  let added = 0
+  for (const hit of hits) {
+    const box = hit.box
+    if (!box || box.length !== 4) continue
+    const x1 = Math.min(box[0], box[2])
+    const y1 = Math.min(box[1], box[3])
+    const x2 = Math.max(box[0], box[2])
+    const y2 = Math.max(box[1], box[3])
+    if (x2 - x1 < 2 || y2 - y1 < 2) continue
+    const nextBox = [Math.round(x1), Math.round(y1), Math.round(x2), Math.round(y2)]
+    boxes.value.push(nextBox)
+    limits.value.push({ box: nextBox, polygon: hit.polygon || null })
+    contours.value.push(hit.contours || null)
+    shapes.value.push(hit.shape === 'contour' ? 'contour' : 'box')
+    labels.value.push(hit.text || hit.query || 'OCR')
+    added += 1
+  }
+  return added
+}
+
+async function findOnUrl(imageUrl: string) {
+  const query = ocrQuery.value.trim()
+  if (!query) throw new Error('请填写要擦除的文字')
+  const data = await findEraseRegions({
+    imageUrl,
+    query,
+    kinds: 'text',
+    shape: shape.value,
+  })
+  return data.hits || []
+}
+
+async function runFind() {
+  if (!workingUrl.value) {
+    ElMessage.warning('没有原图')
+    return
+  }
+  if (!ocrQuery.value.trim()) {
+    ElMessage.warning('请填写要擦除的文字，多个用逗号分隔')
+    return
+  }
+  busy.value = true
+  progress.value = ''
+  try {
+    const hits = await findOnUrl(workingUrl.value)
+    const added = applyHits(hits)
+    draw()
+    if (!added) {
+      ElMessage.warning('没有识别到匹配文字')
+      status.value = '没有匹配到，可改关键词或手动画框'
+      return
+    }
+    status.value = `已框选 ${added} 处，确认后点擦除`
+    ElMessage.success(`已框选 ${added} 处`)
+  } catch (e) {
+    ElMessage.error(errorText(e))
+  } finally {
+    busy.value = false
+  }
+}
+
+async function runBatchFindErase() {
+  if (!canBatch.value) {
+    ElMessage.warning('当前只有一张图')
+    return
+  }
+  if (!ocrQuery.value.trim()) {
+    ElMessage.warning('请填写要擦除的文字，多个用逗号分隔')
+    return
+  }
+  if (history.value.length > 0) {
+    try {
+      await ElMessageBox.confirm('批量会从每张原图重新识别擦除，当前这张未替换的结果会丢掉。', '批量 OCR 擦除', {
+        confirmButtonText: '继续',
+        cancelButtonText: '取消',
+        type: 'warning',
+      })
+    } catch {
+      return
+    }
+  }
+  busy.value = true
+  const replaced: { index: number; url: string }[] = []
+  let skipped = 0
+  let failed = 0
+  try {
+    for (let i = 0; i < props.sources.length; i += 1) {
+      const source = props.sources[i]
+      if (!source) continue
+      progress.value = `${i + 1}/${props.sources.length}`
+      status.value = `批量识别中 ${progress.value}`
+      try {
+        const hits = await findOnUrl(source)
+        const hitBoxes = (hits || [])
+          .map((hit) => hit.box)
+          .filter((box): box is number[] => !!box && box.length === 4)
+          .map((box) => {
+            const x1 = Math.min(box[0], box[2])
+            const y1 = Math.min(box[1], box[3])
+            const x2 = Math.max(box[0], box[2])
+            const y2 = Math.max(box[1], box[3])
+            return [Math.round(x1), Math.round(y1), Math.round(x2), Math.round(y2)]
+          })
+          .filter((box) => box[2] - box[0] >= 2 && box[3] - box[1] >= 2)
+        if (!hitBoxes.length) {
+          skipped += 1
+          continue
+        }
+        const data = await eraseProductImage({
+          imageUrl: source,
+          boxes: hitBoxes,
+          polygons: hitBoxes.map(() => null),
+          shapes: hitBoxes.map(() => 'box'),
+          scope: props.uploadContext?.scope,
+          resource: props.uploadContext?.resource,
+          productId: props.uploadContext?.productId,
+          skuId: props.uploadContext?.skuId,
+        })
+        replaced.push({ index: i, url: data.url })
+      } catch {
+        failed += 1
+      }
+    }
+    if (replaced.length) {
+      emit('batchReplace', replaced)
+      const current = replaced.find((row) => row.index === props.index)
+      if (current) {
+        history.value = []
+        workingUrl.value = current.url
+        clearMarks()
+        loadUrl(current.url, false)
+      }
+    }
+    const msg = `批量完成：成功 ${replaced.length}，跳过 ${skipped}，失败 ${failed}`
+    status.value = msg
+    if (failed) ElMessage.warning(msg)
+    else ElMessage.success(msg)
+  } finally {
+    busy.value = false
+    progress.value = ''
+  }
+}
+
 async function snapAt(index: number) {
   const limit = limits.value[index]
   if (!limit || !workingUrl.value) return
@@ -673,6 +821,22 @@ onBeforeUnmount(() => {
       </div>
       <aside class="tool">
         <div class="tool-title">框选擦除</div>
+        <div class="rotate-label">OCR 擦文字</div>
+        <el-input
+          v-model="ocrQuery"
+          type="textarea"
+          :rows="3"
+          maxlength="200"
+          show-word-limit
+          :disabled="busy"
+          placeholder="例如：品牌:禧玛诺/SHIMANO,SHIMANO&#10;多个用逗号分隔；支持首尾字模糊匹配"
+        />
+        <div class="row">
+          <el-button :loading="busy" :disabled="busy" @click="runFind">识别框选</el-button>
+          <el-button :loading="busy" :disabled="busy || !canBatch" @click="runBatchFindErase">
+            {{ busy && progress ? `批量 ${progress}` : '批量擦除全部' }}
+          </el-button>
+        </div>
         <el-select v-model="shape" :disabled="busy">
           <el-option label="框选，适合周边空白多" value="box" />
           <el-option label="圈选，画圈后按色差收紧" value="contour" />
@@ -691,7 +855,7 @@ onBeforeUnmount(() => {
           <el-button size="small" :disabled="busy" @click="setAngle(angle + 1)">右转</el-button>
           <el-button size="small" :disabled="busy || angle === 0" @click="setAngle(0)">复位</el-button>
         </div>
-        <p class="hint">{{ status }} 向左滑打开下一张，向右滑打开上一张。先把斜着的字标转到水平，再画正的框。保存后的图片仍是原来的方向，选区以外的像素保持原图。</p>
+        <p class="hint">{{ status }} 规格图可左右切换；「批量擦除全部」会对当前相册每张图 OCR 识别并擦除。保存后的图片仍是原来的方向，选区以外的像素保持原图。</p>
         <ul>
           <li v-for="(_, i) in boxes" :key="i">
             <span>{{ shapes[i] === 'contour' ? '圈' : '框' }} · {{ labels[i] }}</span>

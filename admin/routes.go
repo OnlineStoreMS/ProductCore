@@ -80,6 +80,7 @@ func RegisterRoutes(
 	g.POST("/upload/from-url", uploadH.UploadFromURL)
 	g.POST("/upload/from-url-adapt", uploadH.UploadFromURLAdapt)
 	g.POST("/ai/images/retouch", aiImageH.Retouch)
+	g.POST("/ai/images/erase/find", aiImageH.Find)
 	g.POST("/ai/images/erase/snap", aiImageH.Snap)
 	g.POST("/ai/images/erase", aiImageH.Erase)
 	g.GET("/ai/settings", aiSettingH.Get)

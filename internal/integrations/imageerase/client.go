@@ -24,8 +24,23 @@ func NewClient(baseURL string) *Client {
 	}
 	return &Client{
 		baseURL: baseURL,
-		http:    &http.Client{Timeout: 60 * time.Second},
+		http:    &http.Client{Timeout: 120 * time.Second},
 	}
+}
+
+func (c *Client) Find(ctx context.Context, image []byte, query, kinds, shape string) ([]byte, error) {
+	fields := map[string]string{
+		"query": query,
+		"kinds": kinds,
+		"shape": shape,
+	}
+	if strings.TrimSpace(fields["kinds"]) == "" {
+		fields["kinds"] = "text"
+	}
+	if strings.TrimSpace(fields["shape"]) == "" {
+		fields["shape"] = "box"
+	}
+	return c.post(ctx, "/api/find", image, fields)
 }
 
 func (c *Client) Snap(ctx context.Context, image []byte, boxes, polygons string) ([]byte, error) {

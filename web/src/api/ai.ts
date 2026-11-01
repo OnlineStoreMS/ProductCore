@@ -34,6 +34,27 @@ export interface EraseImageInput {
   skuId?: number
 }
 
+export interface EraseFindHit {
+  kind: string
+  text: string
+  query: string
+  score: number
+  box: number[]
+  polygon?: number[][] | null
+  contours?: number[][][] | null
+  shape?: string
+}
+
+export async function findEraseRegions(input: {
+  imageUrl: string
+  query: string
+  kinds?: string
+  shape?: string
+}): Promise<{ hits: EraseFindHit[] }> {
+  const res = await client.post('/ai/images/erase/find', input, { timeout: 120000 })
+  return unwrap<{ hits: EraseFindHit[] }>(res)
+}
+
 export async function snapProductImage(input: Pick<EraseImageInput, 'imageUrl' | 'boxes' | 'polygons'>): Promise<{ regions: EraseRegion[] }> {
   const res = await client.post('/ai/images/erase/snap', input, { timeout: 60000 })
   return unwrap<{ regions: EraseRegion[] }>(res)

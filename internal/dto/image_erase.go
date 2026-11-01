@@ -12,3 +12,10 @@ type ImageEraseRequest struct {
 	ProductID uint64          `json:"productId"`
 	SkuID     uint64          `json:"skuId"`
 }
+
+type ImageEraseFindRequest struct {
+	ImageURL string `json:"imageUrl"`
+	Query    string `json:"query"`
+	Kinds    string `json:"kinds"`
+	Shape    string `json:"shape"`
+}

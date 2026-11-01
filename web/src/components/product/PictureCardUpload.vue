@@ -307,6 +307,21 @@ function openErase(index: number) {
   eraseOpen.value = true
 }
 
+function applyEraseBatch(rows: { index: number; url: string }[]) {
+  if (!rows.length) return
+  if (props.eraseGallery && props.eraseGallery.length) {
+    for (const row of rows) emit('galleryReplace', row.index, row.url)
+  } else {
+    const next = [...list.value]
+    for (const row of rows) {
+      if (row.index < 0 || row.index >= next.length || !row.url) continue
+      next[row.index] = row.url
+    }
+    list.value = next
+  }
+  ElMessage.success(`已替换 ${rows.length} 张图`)
+}
+
 function applyRetouch(url: string, mode: 'replace' | 'add') {
   if (!url) return
   const fromErase = eraseOpen.value
@@ -518,6 +533,7 @@ function resetDrag() {
       @update:index="eraseIndex = $event"
       @replace="applyRetouch($event, 'replace')"
       @add="applyRetouch($event, 'add')"
+      @batch-replace="applyEraseBatch"
     />
 
     <el-dialog
