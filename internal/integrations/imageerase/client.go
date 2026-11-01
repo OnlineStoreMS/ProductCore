@@ -43,6 +43,12 @@ func (c *Client) Find(ctx context.Context, image []byte, query, kinds, shape str
 	return c.post(ctx, "/api/find", image, fields)
 }
 
+func (c *Client) Residual(ctx context.Context, image []byte, boxes string) ([]byte, error) {
+	return c.post(ctx, "/api/residual", image, map[string]string{
+		"boxes": boxes,
+	})
+}
+
 func (c *Client) Snap(ctx context.Context, image []byte, boxes, polygons string) ([]byte, error) {
 	return c.post(ctx, "/api/snap", image, map[string]string{
 		"boxes":    boxes,

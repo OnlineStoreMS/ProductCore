@@ -195,6 +195,46 @@ func (h *AIImageHandler) Find(c *gin.Context) {
 	response.OK(c, payload)
 }
 
+// Residual godoc
+//
+//	@Summary		检查擦除框位是否还有残留
+//	@Tags			admin-图片
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		dto.ImageEraseRequest	true	"原图与原框"
+//	@Success		200		{object}	response.Body
+//	@Router			/admin/ai/images/erase/residual [post]
+func (h *AIImageHandler) Residual(c *gin.Context) {
+	if h.erase == nil {
+		response.Fail(c, http.StatusServiceUnavailable, "未配置图片擦除")
+		return
+	}
+	var body dto.ImageEraseRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Fail(c, http.StatusBadRequest, "参数不正确")
+		return
+	}
+	raw, err := h.readSourceImage(c.Request.Context(), body.ImageURL)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+	out, err := h.erase.Residual(ctx, raw, jsonText(body.Boxes, "[]"))
+	if err != nil {
+		response.Fail(c, http.StatusBadGateway, err.Error())
+		return
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(out, &payload); err != nil {
+		response.Fail(c, http.StatusBadGateway, "擦除服务返回异常")
+		return
+	}
+	response.OK(c, payload)
+}
+
 //	@Summary		图片擦除区域识别
 //	@Tags			admin-图片
 //	@Accept			json

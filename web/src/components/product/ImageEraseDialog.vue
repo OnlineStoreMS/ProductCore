@@ -597,7 +597,7 @@ async function eraseBoxesOnUrl(imageUrl: string, eraseBoxes: number[][], eraseSh
   })
 }
 
-/** 擦除后对原框位再 OCR；还有残留则二次擦除。 */
+/** 擦除后对原框附近再 OCR；仍识别到目标字才二次擦除（不扩框，避免黑边）。 */
 async function eraseWithOcrVerify(imageUrl: string, firstBoxes: number[][], firstShapes?: string[]) {
   const first = await eraseBoxesOnUrl(imageUrl, firstBoxes, firstShapes)
   let url = first.url

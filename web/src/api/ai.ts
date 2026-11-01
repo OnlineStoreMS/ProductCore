@@ -55,6 +55,21 @@ export async function findEraseRegions(input: {
   return unwrap<{ hits: EraseFindHit[] }>(res)
 }
 
+export interface EraseResidualDirty {
+  box: number[]
+  inkRatio: number
+  edgeRatio: number
+  score: number
+}
+
+export async function checkEraseResidual(input: {
+  imageUrl: string
+  boxes: number[][]
+}): Promise<{ dirty: EraseResidualDirty[]; clean: boolean }> {
+  const res = await client.post('/ai/images/erase/residual', input, { timeout: 60000 })
+  return unwrap<{ dirty: EraseResidualDirty[]; clean: boolean }>(res)
+}
+
 export async function snapProductImage(input: Pick<EraseImageInput, 'imageUrl' | 'boxes' | 'polygons'>): Promise<{ regions: EraseRegion[] }> {
   const res = await client.post('/ai/images/erase/snap', input, { timeout: 60000 })
   return unwrap<{ regions: EraseRegion[] }>(res)
