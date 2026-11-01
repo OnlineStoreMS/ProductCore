@@ -542,6 +542,86 @@ async function findOnUrl(imageUrl: string) {
   return data.hits || []
 }
 
+function normalizeBox(box: number[]): number[] | null {
+  if (!box || box.length !== 4) return null
+  const x1 = Math.min(box[0], box[2])
+  const y1 = Math.min(box[1], box[3])
+  const x2 = Math.max(box[0], box[2])
+  const y2 = Math.max(box[1], box[3])
+  if (x2 - x1 < 2 || y2 - y1 < 2) return null
+  return [Math.round(x1), Math.round(y1), Math.round(x2), Math.round(y2)]
+}
+
+function hitsToBoxes(hits: Array<{ box?: number[] }>): number[][] {
+  const out: number[][] = []
+  for (const hit of hits) {
+    const box = normalizeBox(hit.box || [])
+    if (box) out.push(box)
+  }
+  return out
+}
+
+function expandBox(box: number[], pad: number): number[] {
+  return [box[0] - pad, box[1] - pad, box[2] + pad, box[3] + pad]
+}
+
+function boxesOverlap(a: number[], b: number[]): boolean {
+  return !(a[2] < b[0] || b[2] < a[0] || a[3] < b[1] || b[3] < a[1])
+}
+
+/** 二次复查只盯着原框附近，避免全图误擦。 */
+function residualHitsNear(
+  hits: Array<{ box?: number[] }>,
+  originBoxes: number[][],
+  pad = 24,
+): Array<{ box?: number[] }> {
+  if (!originBoxes.length) return hits
+  const zones = originBoxes.map((box) => expandBox(box, pad))
+  return hits.filter((hit) => {
+    const box = normalizeBox(hit.box || [])
+    if (!box) return false
+    return zones.some((zone) => boxesOverlap(zone, box))
+  })
+}
+
+async function eraseBoxesOnUrl(imageUrl: string, eraseBoxes: number[][], eraseShapes?: string[]) {
+  return eraseProductImage({
+    imageUrl,
+    boxes: eraseBoxes,
+    polygons: eraseBoxes.map(() => null),
+    shapes: eraseShapes?.length === eraseBoxes.length ? eraseShapes : eraseBoxes.map(() => 'box'),
+    scope: props.uploadContext?.scope,
+    resource: props.uploadContext?.resource,
+    productId: props.uploadContext?.productId,
+    skuId: props.uploadContext?.skuId,
+  })
+}
+
+/** 擦除后对原框位再 OCR；还有残留则二次擦除。 */
+async function eraseWithOcrVerify(imageUrl: string, firstBoxes: number[][], firstShapes?: string[]) {
+  const first = await eraseBoxesOnUrl(imageUrl, firstBoxes, firstShapes)
+  let url = first.url
+  let secondPass = false
+  if (!ocrQuery.value.trim()) {
+    return { url, secondPass }
+  }
+  try {
+    const again = await findOnUrl(url)
+    const residual = residualHitsNear(again, firstBoxes)
+    const againBoxes = hitsToBoxes(residual)
+    if (!againBoxes.length) {
+      return { url, secondPass }
+    }
+    status.value = `检测到残留 ${againBoxes.length} 处，正在二次擦除`
+    const second = await eraseBoxesOnUrl(url, againBoxes)
+    url = second.url
+    secondPass = true
+  } catch {
+    // 复查失败不阻断第一次结果
+  }
+  return { url, secondPass }
+}
+
 async function runFind() {
   if (!workingUrl.value) {
     ElMessage.warning('没有原图')
@@ -603,31 +683,13 @@ async function runBatchFindErase() {
       status.value = `批量识别中 ${progress.value}`
       try {
         const hits = await findOnUrl(source)
-        const hitBoxes = (hits || [])
-          .map((hit) => hit.box)
-          .filter((box): box is number[] => !!box && box.length === 4)
-          .map((box) => {
-            const x1 = Math.min(box[0], box[2])
-            const y1 = Math.min(box[1], box[3])
-            const x2 = Math.max(box[0], box[2])
-            const y2 = Math.max(box[1], box[3])
-            return [Math.round(x1), Math.round(y1), Math.round(x2), Math.round(y2)]
-          })
-          .filter((box) => box[2] - box[0] >= 2 && box[3] - box[1] >= 2)
+        const hitBoxes = hitsToBoxes(hits || [])
         if (!hitBoxes.length) {
           skipped += 1
           continue
         }
-        const data = await eraseProductImage({
-          imageUrl: source,
-          boxes: hitBoxes,
-          polygons: hitBoxes.map(() => null),
-          shapes: hitBoxes.map(() => 'box'),
-          scope: props.uploadContext?.scope,
-          resource: props.uploadContext?.resource,
-          productId: props.uploadContext?.productId,
-          skuId: props.uploadContext?.skuId,
-        })
+        status.value = `批量擦除中 ${progress.value}`
+        const data = await eraseWithOcrVerify(source, hitBoxes)
         replaced.push({ index: i, url: data.url })
       } catch {
         failed += 1
@@ -681,20 +743,33 @@ async function runErase() {
   }
   busy.value = true
   try {
-    const data = await eraseProductImage({
-      imageUrl: workingUrl.value,
-      boxes: limits.value.map((item) => item.box),
-      polygons: limits.value.map((item) => item.polygon),
-      shapes: shapes.value,
-      scope: props.uploadContext?.scope,
-      resource: props.uploadContext?.resource,
-      productId: props.uploadContext?.productId,
-      skuId: props.uploadContext?.skuId,
-    })
+    const firstBoxes = limits.value.map((item) => item.box)
+    let nextUrl = ''
+    let secondPass = false
+    if (ocrQuery.value.trim()) {
+      const result = await eraseWithOcrVerify(workingUrl.value, firstBoxes, shapes.value)
+      nextUrl = result.url
+      secondPass = result.secondPass
+    } else {
+      const data = await eraseProductImage({
+        imageUrl: workingUrl.value,
+        boxes: firstBoxes,
+        polygons: limits.value.map((item) => item.polygon),
+        shapes: shapes.value,
+        scope: props.uploadContext?.scope,
+        resource: props.uploadContext?.resource,
+        productId: props.uploadContext?.productId,
+        skuId: props.uploadContext?.skuId,
+      })
+      nextUrl = data.url
+    }
     history.value.push(workingUrl.value)
-    workingUrl.value = data.url
-    status.value = '已擦除，可继续修，或替换当前图、添加保存'
-    loadUrl(data.url, false)
+    workingUrl.value = nextUrl
+    clearMarks()
+    status.value = secondPass
+      ? '已二次擦除残留，可继续修，或替换当前图、添加保存'
+      : '已擦除，可继续修，或替换当前图、添加保存'
+    loadUrl(nextUrl, false)
   } catch (e) {
     ElMessage.error(errorText(e))
   } finally {
