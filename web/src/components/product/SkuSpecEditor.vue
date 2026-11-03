@@ -39,6 +39,10 @@ const localSpecs = ref<SkuSpec[]>(cloneSpecs(props.modelValue))
 const localSkus = ref<SkuItem[]>(cloneSkus(props.skus))
 /** 已生成/已保存的规格组合，编码不可再改 */
 const lockedComboKeys = ref<Set<string>>(new Set())
+/** 上一轮规格快照，用于区分「仅改名」与「结构变更」 */
+let prevSpecsSnapshot = cloneSpecs(localSpecs.value)
+/** 各规格维当前写入 SKU.specs 的键（改名为空时暂留旧键，避免刷掉规格信息） */
+let skuSpecKeysByIndex = localSpecs.value.map((s) => s.name.trim())
 let syncing = false
 
 function comboKeyForSku(sku: SkuItem): string {
@@ -292,7 +296,56 @@ function regenerateSkus(preserveFrom?: SkuItem[]) {
     } satisfies SkuItem
   })
 
+  skuSpecKeysByIndex = localSpecs.value.map((s) => s.name.trim())
   commitSkus(applySpecPics(nextSkus))
+}
+
+/** 仅规格名变更：按维索引把 SKU.specs 的键改名，不重建笛卡尔积 */
+function renameSkuSpecKeysOnly(prev: SkuSpec[], curr: SkuSpec[]) {
+  const nextKeys = skuSpecKeysByIndex.slice()
+  const renames: { from: string; to: string }[] = []
+
+  for (let i = 0; i < curr.length; i++) {
+    const newName = curr[i].name.trim()
+    const boundKey = nextKeys[i] || prev[i]?.name?.trim() || ''
+    if (!newName) {
+      // 输入过程中清空：键仍挂在旧名上，规格信息不丢
+      continue
+    }
+    if (boundKey && boundKey !== newName) {
+      renames.push({ from: boundKey, to: newName })
+    }
+    nextKeys[i] = newName
+  }
+  nextKeys.length = curr.length
+  skuSpecKeysByIndex = nextKeys
+
+  if (!renames.length) {
+    pruneFilters()
+    return
+  }
+
+  localSkus.value = localSkus.value.map((sku) => {
+    const nextSpecs = { ...(sku.specs || {}) }
+    for (const { from, to } of renames) {
+      if (!(from in nextSpecs)) continue
+      if (!(to in nextSpecs)) nextSpecs[to] = nextSpecs[from]
+      delete nextSpecs[from]
+    }
+    return { ...sku, specs: nextSpecs }
+  })
+
+  for (const { from, to } of renames) {
+    if (from in filterBySpec) {
+      const fv = filterBySpec[from]
+      delete filterBySpec[from]
+      if (!(to in filterBySpec)) filterBySpec[to] = fv
+    }
+  }
+
+  syncLockedKeys(localSkus.value)
+  pruneFilters()
+  emit('update:skus', cloneSkus(localSkus.value))
 }
 
 function commitSkus(list: SkuItem[]) {
@@ -304,6 +357,17 @@ function commitSkus(list: SkuItem[]) {
   nextTick(() => {
     syncing = false
   })
+}
+
+function specsStructureSignature(list: SkuSpec[]) {
+  return JSON.stringify(
+    list.map((s) => s.values.map((v) => ({ value: v.value, remark: v.remark || '', pic: v.pic || '' }))),
+  )
+}
+
+function isNameOnlySpecChange(prev: SkuSpec[], curr: SkuSpec[]) {
+  if (prev.length !== curr.length) return false
+  return specsStructureSignature(prev) === specsStructureSignature(curr)
 }
 
 function cartesian<T>(arrays: T[][]): T[][] {
@@ -318,8 +382,15 @@ watch(
   () => {
     if (syncing || props.specsReadonly) return
     syncing = true
-    emit('update:modelValue', cloneSpecs(localSpecs.value))
-    regenerateSkus()
+    const prev = prevSpecsSnapshot
+    const curr = localSpecs.value
+    emit('update:modelValue', cloneSpecs(curr))
+    if (isNameOnlySpecChange(prev, curr)) {
+      renameSkuSpecKeysOnly(prev, curr)
+    } else {
+      regenerateSkus()
+    }
+    prevSpecsSnapshot = cloneSpecs(curr)
     nextTick(() => {
       syncing = false
     })
@@ -333,6 +404,8 @@ watch(
     if (syncing) return
     if (specsSignature(v) === specsSignature(localSpecs.value)) return
     localSpecs.value = cloneSpecs(v)
+    prevSpecsSnapshot = cloneSpecs(v)
+    skuSpecKeysByIndex = v.map((s) => s.name.trim())
     if (!props.specsReadonly) {
       regenerateSkus(cloneSkus(props.skus))
     }
@@ -486,7 +559,8 @@ function flushSpecsToParent() {
 
 defineExpose({ flushSpecsToParent, recomputeDuplicateErrors, ensureAllSkuCodesSilent })
 
-const skuTableKey = computed(() => specsSignature(localSpecs.value))
+/** 表格 key 只跟规格值结构走，改规格名不整表重挂，避免刷掉正在编辑的价格库存 */
+const skuTableKey = computed(() => specsStructureSignature(localSpecs.value))
 
 const tableSpecColumns = computed(() =>
   localSpecs.value
