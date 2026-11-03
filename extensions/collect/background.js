@@ -115,18 +115,46 @@ function storeMatchesPage(cur, incoming) {
   return !!(zzb && page && zzb === page);
 }
 
+function skuStateKey(row) {
+  if (!row) return "";
+  const specs = row.specs;
+  if (specs && typeof specs === "object") {
+    const keys = Object.keys(specs).filter((k) => specs[k] != null && String(specs[k]).trim());
+    if (keys.length) {
+      return keys
+        .slice()
+        .sort()
+        .map((k) => k + "=" + String(specs[k]).replace(/\s+/g, " ").trim())
+        .join("\0");
+    }
+  }
+  return String(row.specValue || row.name || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function mergeSkuState(oldList, nextList) {
   const byKey = new Map();
   const add = (row) => {
     if (!row) return;
-    const key = String(row.specValue || row.name || "")
-      .replace(/\s+/g, " ")
-      .trim();
+    const key = skuStateKey(row);
     if (!key) return;
     const prev = byKey.get(key);
     if (!prev) {
-      byKey.set(key, Object.assign({}, row, { specValue: key, name: row.name || key }));
+      byKey.set(
+        key,
+        Object.assign({}, row, {
+          specValue: row.specValue || key,
+          name: row.name || row.specValue || key,
+          specs: row.specs ? Object.assign({}, row.specs) : undefined,
+          dimensions: row.dimensions ? row.dimensions.slice() : undefined,
+        })
+      );
       return;
+    }
+    if (row.specs && (!prev.specs || !Object.keys(prev.specs).length)) {
+      prev.specs = Object.assign({}, row.specs);
+      prev.dimensions = (row.dimensions || Object.keys(row.specs)).slice();
     }
     if (row.price > 0) {
       prev.price = row.price;
@@ -221,28 +249,112 @@ function scrapeSkuMainWorld() {
   }
   const rows = [];
   const seen = {};
+  const DEFAULT_SPEC_NAME = "商品规格";
+  const SPEC_LABELS = [
+    "颜色分类",
+    "尺码分类",
+    "套餐类型",
+    "网络类型",
+    "商品规格",
+    "颜色",
+    "尺码",
+    "尺寸",
+    "规格",
+    "套餐",
+    "款式",
+    "型号",
+    "版本",
+  ];
+  const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const looksLikeSpecLabel = (name) => {
+    const n = String(name || "").trim();
+    return !!(n && n.length <= 16 && /[\u4e00-\u9fff]/.test(n) && !/[A-Za-z0-9]/.test(n));
+  };
   const parseSkuName = (skuName) => {
-    const text = String(skuName || "")
+    const raw = String(skuName || "")
       .replace(/\uFEFF/g, "")
       .replace(/\t/g, "")
       .replace(/\s+/g, " ")
       .trim();
-    const idxAscii = text.indexOf(":");
-    const idxFull = text.indexOf("：");
-    let splitAt = -1;
-    if (idxAscii >= 0 && idxFull >= 0) splitAt = Math.min(idxAscii, idxFull);
-    else if (idxAscii >= 0) splitAt = idxAscii;
-    else if (idxFull >= 0) splitAt = idxFull;
-    let specValue = splitAt > 0 ? text.slice(splitAt + 1).trim() : text;
-    const wrapped = specValue.match(/^([^:：()（）]+)[（(](.+)[）)]$/);
-    if (wrapped) {
-      const prefix = wrapped[1].trim();
-      const inner = wrapped[2].trim();
-      if (inner && prefix && /[\u4e00-\u9fff]/.test(prefix) && !/[A-Za-z0-9]/.test(prefix) && prefix.length <= 16) {
-        specValue = inner;
+    const specs = {};
+    const dimensions = [];
+    const addSpec = (name, value) => {
+      const n = String(name || "").trim();
+      const v = String(value || "")
+        .replace(/^[;；|,\s]+|[;；|,\s]+$/g, "")
+        .trim();
+      if (!n || !v || specs[n]) return;
+      dimensions.push(n);
+      specs[n] = v;
+    };
+    const semiParts = raw.split(/[;；]/).map((s) => s.trim()).filter(Boolean);
+    if (semiParts.length > 1) {
+      semiParts.forEach((part) => {
+        const m = part.match(/^([^:：]{1,16})[:：](.+)$/);
+        if (m && looksLikeSpecLabel(m[1])) addSpec(m[1].trim(), m[2].trim());
+      });
+    }
+    if (dimensions.length < 2) {
+      const re = new RegExp("(" + SPEC_LABELS.map(escapeRegExp).join("|") + ")\\s*[:：]\\s*", "g");
+      const matches = [];
+      let m;
+      while ((m = re.exec(raw))) {
+        matches.push({ name: m[1], index: m.index, end: m.index + m[0].length });
+      }
+      if (matches.length >= 2 || (matches.length === 1 && dimensions.length === 0)) {
+        Object.keys(specs).forEach((k) => delete specs[k]);
+        dimensions.length = 0;
+        for (let i = 0; i < matches.length; i++) {
+          const start = matches[i].end;
+          const end = i + 1 < matches.length ? matches[i + 1].index : raw.length;
+          addSpec(
+            matches[i].name,
+            raw.slice(start, end).replace(/^[;；|,\s]+|[;；|,\s]+$/g, "").trim()
+          );
+        }
       }
     }
-    return { specName: "商品规格", specValue: specValue || text };
+    if (dimensions.length === 0) {
+      const wrapped = raw.match(/^([^:：()（）]+)[（(](.+)[）)]$/);
+      if (wrapped && looksLikeSpecLabel(wrapped[1])) addSpec(wrapped[1].trim(), wrapped[2].trim());
+    }
+    if (dimensions.length === 0) {
+      const idxAscii = raw.indexOf(":");
+      const idxFull = raw.indexOf("：");
+      let splitAt = -1;
+      if (idxAscii >= 0 && idxFull >= 0) splitAt = Math.min(idxAscii, idxFull);
+      else if (idxAscii >= 0) splitAt = idxAscii;
+      else if (idxFull >= 0) splitAt = idxFull;
+      if (splitAt > 0) {
+        const name = raw.slice(0, splitAt).trim();
+        const value = raw.slice(splitAt + 1).trim();
+        if (looksLikeSpecLabel(name)) addSpec(name, value || raw);
+        else addSpec(DEFAULT_SPEC_NAME, value || raw);
+      } else {
+        addSpec(DEFAULT_SPEC_NAME, raw);
+      }
+    }
+    const displayValue = dimensions.map((d) => specs[d]).join("/");
+    return {
+      specs,
+      dimensions: dimensions.slice(),
+      specName: dimensions[0] || DEFAULT_SPEC_NAME,
+      specValue: displayValue || raw,
+    };
+  };
+  const rowKey = (row) => {
+    const specs = row && row.specs;
+    if (specs && typeof specs === "object") {
+      const keys = Object.keys(specs).filter((k) => specs[k] != null && String(specs[k]).trim());
+      if (keys.length) {
+        return keys
+          .slice()
+          .sort()
+          .map((k) => k + "=" + String(specs[k]).replace(/\s+/g, " ").trim())
+          .join("\0");
+      }
+    }
+    return String((row && row.specValue) || "").trim();
   };
   const push = (name, price, stock) => {
     const raw = String(name || "")
@@ -250,11 +362,21 @@ function scrapeSkuMainWorld() {
       .replace(/\s+/g, " ")
       .trim();
     const parsed = parseSkuName(raw);
-    const specName = "商品规格";
     const specValue = parsed.specValue;
     if (!specValue || /^\d+$/.test(specValue) || /请输入SKU|计算价格设置/.test(specValue)) return;
-    const key = specName + "\0" + specValue;
-    if (seen[key]) return;
+    const row = {
+      name: raw || specValue,
+      specs: parsed.specs,
+      dimensions: parsed.dimensions,
+      specName: parsed.specName,
+      specValue,
+      pic: "",
+      price: 0,
+      originalPrice: 0,
+      stock: 0,
+    };
+    const key = rowKey(row);
+    if (!key || seen[key]) return;
     seen[key] = 1;
     const n = Number(String(price == null ? "" : price).replace(/,/g, "").replace(/[^\d.-]/g, ""));
     const priceNum = isFinite(n) && n > 0 ? n : 0;
@@ -264,18 +386,13 @@ function scrapeSkuMainWorld() {
       stockNum = Math.round(Number(stockText.replace(/,/g, "").replace(/[^\d.-]/g, "")));
       if (!isFinite(stockNum) || stockNum < 0) stockNum = 0;
     }
-    rows.push({
-      name: specValue,
-      specName,
-      specValue,
-      pic: "",
-      price: priceNum,
-      originalPrice: priceNum,
-      stock: stockNum,
-    });
+    row.price = priceNum;
+    row.originalPrice = priceNum;
+    row.stock = stockNum;
+    rows.push(row);
   };
   const re =
-    /([^\n]{2,80}[:：][^\n]{1,80})\n\s*商品ID[:：]\s*\d+\s*\n\s*(\d+(?:\.\d+)?)\s*\n\s*([^\n]*)\s*\n\s*([^\n]*)/g;
+    /([^\n]{2,120}[:：][^\n]{1,160})\n\s*商品ID[:：]\s*\d+\s*\n\s*(\d+(?:\.\d+)?)\s*\n\s*([^\n]*)\s*\n\s*([^\n]*)/g;
   let m;
   while ((m = re.exec(text))) push(m[1], m[2], m[4]);
   return rows;

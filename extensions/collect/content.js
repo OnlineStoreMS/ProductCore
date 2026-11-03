@@ -116,6 +116,41 @@
     return parseSkuName(name).specValue;
   }
 
+  function skuRowKey(row) {
+    if (!row) return "";
+    const specs = row.specs;
+    if (specs && typeof specs === "object") {
+      const keys = Object.keys(specs).filter((k) => specs[k] != null && String(specs[k]).trim());
+      if (keys.length) {
+        return keys
+          .slice()
+          .sort()
+          .map((k) => k + "=" + String(specs[k]).replace(/\s+/g, " ").trim())
+          .join("\0");
+      }
+    }
+    return String(row.specValue || row.name || "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function skuRowFromParsed(rawName, parsed, pic, price, original, stock) {
+    const specs = Object.assign({}, (parsed && parsed.specs) || {});
+    const dimensions = ((parsed && parsed.dimensions) || Object.keys(specs)).slice();
+    const specValue = (parsed && parsed.specValue) || dimensions.map((d) => specs[d]).join("/");
+    return {
+      name: String(rawName || specValue || "").trim() || specValue,
+      specs,
+      dimensions,
+      specName: (parsed && parsed.specName) || dimensions[0] || DEFAULT_SPEC_NAME,
+      specValue,
+      pic: clean(pic),
+      price: num(price),
+      originalPrice: num(original != null ? original : price),
+      stock: parseStock(stock),
+    };
+  }
+
   function zzbStoredTitle() {
     const pack = lsJson("sku复制传值数据");
     const t = pack && pack.myItemInfo && pack.myItemInfo.item && pack.myItemInfo.item.title;
@@ -143,18 +178,11 @@
       videos.push({ src: u });
     };
     const addSku = (item) => {
-      const specValue = zzbSpecValue(item && item.name);
-      if (!specValue) return;
-      const pic = clean(item.url);
-      skus.push({
-        name: specValue,
-        specName: DEFAULT_SPEC_NAME,
-        specValue,
-        pic: pic,
-        price: num(item.price),
-        originalPrice: num(item.price),
-        stock: parseStock(item.quantity),
-      });
+      const parsed = parseSkuName(item && item.name);
+      if (!parsed.specValue) return;
+      skus.push(
+        skuRowFromParsed(item && item.name, parsed, item.url, item.price, item.price, item.quantity)
+      );
     };
     const list = lsJson("fileList_tb");
     const pack = lsJson("sku复制传值数据");
@@ -188,9 +216,10 @@
     }
     if (pack && Array.isArray(pack.skuInfos)) {
       pack.skuInfos.forEach((item) => {
-        const specValue = zzbSpecValue(item && item.name);
-        if (!specValue) return;
-        const prev = skus.find((s) => s.specValue === specValue);
+        const parsed = parseSkuName(item && item.name);
+        if (!parsed.specValue) return;
+        const key = skuRowKey({ specs: parsed.specs, specValue: parsed.specValue });
+        const prev = skus.find((s) => skuRowKey(s) === key);
         const price = num(item.price);
         const stock = parseStock(item.quantity);
         const pic = clean(item.url);
@@ -212,11 +241,16 @@
   function mergeSkuRows(base, extra) {
     const out = Array.isArray(base) ? base.slice() : [];
     (extra || []).forEach((row) => {
-      if (!row || !row.specValue) return;
-      const prev = out.find((s) => s.specValue === row.specValue);
+      if (!row || !skuRowKey(row)) return;
+      const key = skuRowKey(row);
+      const prev = out.find((s) => skuRowKey(s) === key);
       if (!prev) {
         out.push(row);
         return;
+      }
+      if (row.specs && (!prev.specs || !Object.keys(prev.specs).length)) {
+        prev.specs = Object.assign({}, row.specs);
+        prev.dimensions = (row.dimensions || Object.keys(row.specs)).slice();
       }
       if (row.price > 0) {
         prev.price = row.price;
@@ -505,21 +539,13 @@
         .replace(/\s+/g, " ")
         .trim();
       const parsed = parseSkuName(raw);
-      const specName = DEFAULT_SPEC_NAME;
       const specValue = parsed.specValue;
+      const specName = parsed.specName || DEFAULT_SPEC_NAME;
       if (!specValue || /^\d+$/.test(specValue)) return;
       if (/^(规格名称|销售价|市场价|原价|库存|商家编码|名称|计算价格)$/.test(specValue)) return;
       if (/查询中|加载中|请输入SKU/.test(specValue) || /查询中|加载中|请输入SKU/.test(specName)) return;
-      const key = specName + "\0" + specValue + "\0" + String(pic || "");
-      const row = {
-        name: specValue,
-        specName,
-        specValue,
-        pic: clean(pic),
-        price: num(price),
-        originalPrice: num(original),
-        stock: parseStock(stock),
-      };
+      const row = skuRowFromParsed(raw, parsed, pic, price, original, stock);
+      const key = skuRowKey(row) + "\0" + String(row.pic || "");
       if (seen[key] && !(row.price > 0 && !(seen[key].price > 0))) return;
       seen[key] = row;
       rows.push(row);
@@ -549,13 +575,19 @@
   function parseSkuByText(push) {
     const raw = ((document.body && document.body.innerText) || "").replace(/\r/g, "");
     const multiline =
-      /([^\n]{2,80}[:：][^\n]{1,80})\n\s*商品ID[:：]\s*\d+\s*\n\s*(\d+(?:\.\d+)?)\s*\n\s*([^\n]*)\s*\n\s*([^\n]*)/g;
+      /([^\n]{2,120}[:：][^\n]{1,160})\n\s*商品ID[:：]\s*\d+\s*\n\s*(\d+(?:\.\d+)?)\s*\n\s*([^\n]*)\s*\n\s*([^\n]*)/g;
     let m;
     while ((m = multiline.exec(raw))) {
       push(m[1], "", m[2], m[2], m[4]);
     }
-    const compact =
-      /((?:商品规格|颜色分类|颜色|尺码分类|尺码|规格|套餐类型|套餐|款式|型号)[:：][^\n]{1,80}?)\s+商品ID[:：]\s*\d+\s+(\d+(?:\.\d+)?|-)\s+(\S+)\s+(\S+)/g;
+    const label =
+      "商品规格|颜色分类|颜色|尺码分类|尺码|尺寸|规格|套餐类型|套餐|款式|型号|版本|网络类型";
+    const compact = new RegExp(
+      "((?:(?:" +
+        label +
+        ")[:：][^\\n;；]{1,120}(?:[;；]\\s*)?)+)\\s+商品ID[:：]\\s*\\d+\\s+(\\d+(?:\\.\\d+)?|-)\\s+(\\S+)\\s+(\\S+)",
+      "g"
+    );
     while ((m = compact.exec(raw))) {
       push(m[1], "", m[2], m[2], m[4]);
     }
@@ -702,7 +734,8 @@
   function dedupeSkuRows(rows) {
     const map = new Map();
     rows.forEach((row) => {
-      const key = (row.specName || "") + "\0" + (row.specValue || row.name || "");
+      const key = skuRowKey(row);
+      if (!key) return;
       const prev = map.get(key);
       if (!prev || (row.price > 0 && !(prev.price > 0))) map.set(key, row);
     });
@@ -1035,18 +1068,45 @@
     };
   }
 
-  /** 规格名固定「商品规格」。至尊宝 SKU 工具是「任意标签(值)」或「标签:值」，括号/冒号里才是规格值。 */
+  /**
+   * 多规格：至尊宝 SKU 名常为「尺寸:xxx;颜色分类:yyy」（笛卡尔积的一行）。
+   * 入库时拆成多维 skuSpecs，SKU.specs 保留各维取值。
+   */
   var DEFAULT_SPEC_NAME = "商品规格";
+  var SPEC_LABELS = [
+    "颜色分类",
+    "尺码分类",
+    "套餐类型",
+    "网络类型",
+    "商品规格",
+    "颜色",
+    "尺码",
+    "尺寸",
+    "规格",
+    "套餐",
+    "款式",
+    "型号",
+    "版本",
+  ];
+
+  function escapeRegExp(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function looksLikeSpecLabel(name) {
+    const n = String(name || "").trim();
+    if (!n || n.length > 16) return false;
+    if (!/[\u4e00-\u9fff]/.test(n)) return false;
+    if (/[A-Za-z0-9]/.test(n)) return false;
+    return true;
+  }
 
   function unwrapLabeledSpec(text) {
     const m = String(text || "").match(/^([^:：()（）]+)[（(](.+)[）)]$/);
     if (!m) return text;
     const prefix = m[1].trim();
     const inner = m[2].trim();
-    if (!inner || !prefix) return text;
-    if (!/[\u4e00-\u9fff]/.test(prefix)) return text;
-    if (/[A-Za-z0-9]/.test(prefix)) return text;
-    if (prefix.length > 16) return text;
+    if (!inner || !looksLikeSpecLabel(prefix)) return text;
     return inner;
   }
 
@@ -1056,15 +1116,84 @@
       .replace(/\t/g, "")
       .replace(/\s+/g, " ")
       .trim();
-    const idxAscii = text.indexOf(":");
-    const idxFull = text.indexOf("：");
-    let splitAt = -1;
-    if (idxAscii >= 0 && idxFull >= 0) splitAt = Math.min(idxAscii, idxFull);
-    else if (idxAscii >= 0) splitAt = idxAscii;
-    else if (idxFull >= 0) splitAt = idxFull;
-    let specValue = splitAt > 0 ? text.slice(splitAt + 1).trim() : text;
-    specValue = unwrapLabeledSpec(specValue);
-    return { specName: DEFAULT_SPEC_NAME, specValue: specValue || text };
+    const specs = {};
+    const dimensions = [];
+    const addSpec = (name, value) => {
+      const n = String(name || "").trim();
+      let v = String(value || "")
+        .replace(/^[;；|,\s]+|[;；|,\s]+$/g, "")
+        .trim();
+      if (!n || !v) return;
+      if (!specs[n]) {
+        dimensions.push(n);
+        specs[n] = v;
+      }
+    };
+
+    // 1) 「尺寸:a;颜色分类:b」按分号拆
+    const semiParts = text.split(/[;；]/).map((s) => s.trim()).filter(Boolean);
+    if (semiParts.length > 1) {
+      semiParts.forEach((part) => {
+        const m = part.match(/^([^:：]{1,16})[:：](.+)$/);
+        if (m && looksLikeSpecLabel(m[1])) addSpec(m[1].trim(), m[2].trim());
+      });
+    }
+
+    // 2) 无分号或拆不全：按已知标签顺序切「颜色分类:红尺寸:大」
+    if (dimensions.length < 2) {
+      const labelAlt = SPEC_LABELS.map(escapeRegExp).join("|");
+      const re = new RegExp("(" + labelAlt + ")\\s*[:：]\\s*", "g");
+      const matches = [];
+      let m;
+      while ((m = re.exec(text))) {
+        matches.push({ name: m[1], index: m.index, end: m.index + m[0].length });
+      }
+      if (matches.length >= 2 || (matches.length === 1 && dimensions.length === 0)) {
+        Object.keys(specs).forEach((k) => delete specs[k]);
+        dimensions.length = 0;
+        for (let i = 0; i < matches.length; i++) {
+          const start = matches[i].end;
+          const end = i + 1 < matches.length ? matches[i + 1].index : text.length;
+          const value = text.slice(start, end).replace(/^[;；|,\s]+|[;；|,\s]+$/g, "").trim();
+          addSpec(matches[i].name, value);
+        }
+      }
+    }
+
+    // 3) 「颜色分类(红色)」括号形式
+    if (dimensions.length === 0) {
+      const wrapped = text.match(/^([^:：()（）]+)[（(](.+)[）)]$/);
+      if (wrapped && looksLikeSpecLabel(wrapped[1])) {
+        addSpec(wrapped[1].trim(), wrapped[2].trim());
+      }
+    }
+
+    // 4) 单维「标签:值」或纯文本
+    if (dimensions.length === 0) {
+      const idxAscii = text.indexOf(":");
+      const idxFull = text.indexOf("：");
+      let splitAt = -1;
+      if (idxAscii >= 0 && idxFull >= 0) splitAt = Math.min(idxAscii, idxFull);
+      else if (idxAscii >= 0) splitAt = idxAscii;
+      else if (idxFull >= 0) splitAt = idxFull;
+      if (splitAt > 0) {
+        const name = text.slice(0, splitAt).trim();
+        let value = text.slice(splitAt + 1).trim();
+        value = unwrapLabeledSpec(value);
+        if (looksLikeSpecLabel(name)) addSpec(name, value || text);
+        else addSpec(DEFAULT_SPEC_NAME, value || text);
+      } else {
+        addSpec(DEFAULT_SPEC_NAME, unwrapLabeledSpec(text) || text);
+      }
+    }
+
+    const displayValue = dimensions.map((d) => specs[d]).join("/");
+    return {
+      specs,
+      dimensions: dimensions.slice(),
+      specName: dimensions[0] || DEFAULT_SPEC_NAME,
+      specValue: displayValue || text,
+    };
   }
 
   function nextSkuCode(used) {
@@ -1085,45 +1214,74 @@
     const byKey = new Map();
     rows.forEach((row, i) => {
       const parsed = parseSkuName(row.name || "");
-      const specName = DEFAULT_SPEC_NAME;
-      const specValue = String(row.specValue || parsed.specValue || "").trim();
-      if (!specValue) return;
+      const specs =
+        row.specs && typeof row.specs === "object" && Object.keys(row.specs).length
+          ? Object.assign({}, row.specs)
+          : Object.assign({}, parsed.specs);
+      const dimensions =
+        row.dimensions && row.dimensions.length
+          ? row.dimensions.slice()
+          : (parsed.dimensions || Object.keys(specs)).slice();
+      const specValue =
+        String(row.specValue || "").trim() ||
+        dimensions.map((d) => specs[d]).filter(Boolean).join("/") ||
+        parsed.specValue;
+      if (!specValue || !dimensions.length) return;
       const pic = row.pic || skuPics[i] || "";
       const item = {
-        specName,
+        specs,
+        dimensions,
         specValue,
         pic,
         price: row.price || 0,
         marketPrice: row.originalPrice || row.price || 0,
         stock: row.stock || 0,
       };
-      const key = item.specName + "\0" + item.specValue;
+      const key = skuRowKey(item);
       const prev = byKey.get(key);
       if (!prev || (item.price > 0 && !(prev.price > 0))) byKey.set(key, item);
     });
     const items = Array.from(byKey.values());
-    const specOrder = [];
-    const specValues = {};
+    const dimOrder = [];
+    const seenDim = {};
     items.forEach((item) => {
-      if (!specValues[item.specName]) {
-        specValues[item.specName] = [];
-        specOrder.push(item.specName);
-      }
-      const bucket = specValues[item.specName];
-      const found = bucket.find((v) => v.value === item.specValue);
-      if (!found) bucket.push({ value: item.specValue, pic: item.pic || "" });
-      else if (!found.pic && item.pic) found.pic = item.pic;
+      (item.dimensions || Object.keys(item.specs)).forEach((name) => {
+        if (seenDim[name]) return;
+        seenDim[name] = 1;
+        dimOrder.push(name);
+      });
+    });
+    const specValues = {};
+    dimOrder.forEach((name) => {
+      specValues[name] = [];
+    });
+    items.forEach((item) => {
+      const dims = item.dimensions || Object.keys(item.specs);
+      dims.forEach((name, dimIndex) => {
+        const value = item.specs[name];
+        if (!value) return;
+        if (!specValues[name]) {
+          specValues[name] = [];
+          dimOrder.push(name);
+        }
+        const bucket = specValues[name];
+        const found = bucket.find((v) => v.value === value);
+        // 规格图通常挂在第一维（如颜色）取值上
+        const picForValue = dimIndex === 0 ? item.pic || "" : "";
+        if (!found) bucket.push({ value: value, pic: picForValue });
+        else if (!found.pic && picForValue) found.pic = picForValue;
+      });
     });
     return {
       skus: items.map((item) => ({
         skuCode: nextSkuCode(used),
-        specs: { [item.specName]: item.specValue },
+        specs: item.specs,
         price: item.price,
         marketPrice: item.marketPrice,
         stock: item.stock,
         pic: item.pic,
       })),
-      skuSpecs: specOrder.map((name) => ({ name, values: specValues[name] })),
+      skuSpecs: dimOrder.map((name) => ({ name: name, values: specValues[name] || [] })),
     };
   }
 
