@@ -521,19 +521,26 @@ type publishParams struct {
 	Brand             string       `json:"brand"`
 	CategoryAttrName  string       `json:"categoryAttrName,omitempty"`
 	CategoryAttrValue string       `json:"categoryAttrValue,omitempty"`
-	SpecName          string       `json:"specName"`
-	MainImages        []string     `json:"mainImages"`
-	DetailImages      []string     `json:"detailImages"`
-	Skus              []publishSku `json:"skus"`
-	PlatformProductID string       `json:"platformProductId,omitempty"`
-	UpdateScope       string       `json:"updateScope,omitempty"`
+	SpecName          string            `json:"specName"`
+	SpecTypes         []publishSpecType `json:"specTypes,omitempty"`
+	MainImages        []string          `json:"mainImages"`
+	DetailImages      []string          `json:"detailImages"`
+	Skus              []publishSku      `json:"skus"`
+	PlatformProductID string            `json:"platformProductId,omitempty"`
+	UpdateScope       string            `json:"updateScope,omitempty"`
+}
+
+type publishSpecType struct {
+	Name   string   `json:"name"`
+	Values []string `json:"values"`
 }
 
 type publishSku struct {
-	Name  string `json:"name"`
-	Price int    `json:"price"`
-	Stock int    `json:"stock"`
-	Pic   string `json:"pic,omitempty"`
+	Name  string            `json:"name"`
+	Specs map[string]string `json:"specs,omitempty"`
+	Price int               `json:"price"`
+	Stock int               `json:"stock"`
+	Pic   string            `json:"pic,omitempty"`
 }
 
 func (s *ProductPublishService) categoryPath(categoryID uint64) []string {
@@ -601,33 +608,53 @@ func buildPublishParams(p *dto.ProductDTO, shop *agentscenter.ShopItem, path []s
 	if len(details) > 49 {
 		details = details[:49]
 	}
-	specName := "商品规格"
-	if len(p.SkuSpecs) > 0 && strings.TrimSpace(p.SkuSpecs[0].Name) != "" {
-		specName = strings.TrimSpace(p.SkuSpecs[0].Name)
-	}
 	if len(p.Skus) == 0 {
 		return nil, errors.New("商品没有 SKU")
+	}
+	specTypes := buildPublishSpecTypes(p.SkuSpecs)
+	multi := len(specTypes) >= 2
+	specName := "商品规格"
+	if multi && len(specTypes) > 0 {
+		specName = specTypes[0].Name
 	}
 	skus := make([]publishSku, 0, len(p.Skus))
 	seen := map[string]struct{}{}
 	for _, sku := range p.Skus {
-		name := skuLabel(sku, specName)
+		name, specs := skuSpecParts(sku, specTypes, multi)
 		if name == "" {
 			continue
 		}
-		if _, ok := seen[name]; ok {
+		key := name
+		if multi {
+			key = skuSpecKey(specTypes, specs)
+		}
+		if key == "" {
 			continue
 		}
-		seen[name] = struct{}{}
-		skus = append(skus, publishSku{
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		item := publishSku{
 			Name:  name,
 			Price: int(math.Round(sku.Price)),
 			Stock: sku.Stock,
 			Pic:   strings.TrimSpace(sku.Pic),
-		})
+		}
+		if len(specs) > 0 {
+			item.Specs = specs
+		}
+		skus = append(skus, item)
 	}
 	if len(skus) == 0 {
 		return nil, errors.New("商品没有可用的规格值")
+	}
+	if len(specTypes) == 0 {
+		values := make([]string, 0, len(skus))
+		for _, sku := range skus {
+			values = append(values, sku.Name)
+		}
+		specTypes = []publishSpecType{{Name: "商品规格", Values: uniqueNonEmpty(values)}}
 	}
 	category := strings.TrimSpace(p.CategoryName)
 	if len(path) > 0 {
@@ -652,6 +679,7 @@ func buildPublishParams(p *dto.ProductDTO, shop *agentscenter.ShopItem, path []s
 		CategoryPathHint: hint,
 		Brand:            "无品牌",
 		SpecName:         specName,
+		SpecTypes:        specTypes,
 		MainImages:       mains,
 		DetailImages:     details,
 		Skus:             skus,
@@ -661,6 +689,84 @@ func buildPublishParams(p *dto.ProductDTO, shop *agentscenter.ShopItem, path []s
 		params.CategoryAttrValue = "后拔/后变速器"
 	}
 	return params, nil
+}
+
+func doudianSpecTypeName(name string, multi bool) string {
+	n := strings.TrimSpace(name)
+	if !multi {
+		return "商品规格"
+	}
+	switch n {
+	case "颜色", "色彩":
+		return "颜色分类"
+	case "":
+		return "规格"
+	default:
+		return n
+	}
+}
+
+func buildPublishSpecTypes(specs []dto.SkuSpecDTO) []publishSpecType {
+	specs = dto.CompactSkuSpecs(specs)
+	if len(specs) == 0 {
+		return nil
+	}
+	if len(specs) > 3 {
+		specs = specs[:3]
+	}
+	multi := len(specs) >= 2
+	out := make([]publishSpecType, 0, len(specs))
+	for _, spec := range specs {
+		vals := uniqueNonEmpty(dto.SpecValueTexts(spec))
+		if len(vals) == 0 {
+			continue
+		}
+		out = append(out, publishSpecType{
+			Name:   doudianSpecTypeName(spec.Name, multi),
+			Values: vals,
+		})
+	}
+	return out
+}
+
+func skuSpecParts(sku dto.SkuDTO, types []publishSpecType, multi bool) (string, map[string]string) {
+	mapped := map[string]string{}
+	if sku.Specs != nil {
+		for k, v := range sku.Specs {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+			mapped[doudianSpecTypeName(k, multi)] = v
+		}
+	}
+	parts := make([]string, 0, len(types))
+	for _, t := range types {
+		if v := strings.TrimSpace(mapped[t.Name]); v != "" {
+			parts = append(parts, v)
+		}
+	}
+	name := strings.Join(parts, " ")
+	if name == "" {
+		fallback := "商品规格"
+		if len(types) > 0 {
+			fallback = types[0].Name
+		}
+		name = skuLabel(sku, fallback)
+	}
+	return name, mapped
+}
+
+func skuSpecKey(types []publishSpecType, specs map[string]string) string {
+	parts := make([]string, 0, len(types))
+	for _, t := range types {
+		v := strings.TrimSpace(specs[t.Name])
+		if v == "" {
+			return ""
+		}
+		parts = append(parts, v)
+	}
+	return strings.Join(parts, "\x1f")
 }
 
 func skuLabel(sku dto.SkuDTO, specName string) string {
