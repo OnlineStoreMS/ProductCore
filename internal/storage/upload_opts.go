@@ -140,6 +140,8 @@ func commonResourceDir(resource string) []string {
 	switch resource {
 	case "platform_logo":
 		return []string{"platform", "logo"}
+	case "brand_logo":
+		return []string{"brand", "logo"}
 	case "distribution":
 		return []string{"distribution"}
 	case "video", "video_common":

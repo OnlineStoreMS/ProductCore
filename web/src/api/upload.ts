@@ -26,6 +26,7 @@ export type UploadResource =
   | 'video_916'
   | 'spec'
   | 'platform_logo'
+  | 'brand_logo'
 
 export interface UploadContext {
   scope?: 'product' | 'common'
