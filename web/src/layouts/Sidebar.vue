@@ -27,7 +27,6 @@ const menuItems: MenuEntry[] = [
     icon: Box,
     children: [
       { path: '/products', title: '商品列表', icon: Grid },
-      { path: '/brand-wall', title: '品牌墙', icon: PictureFilled },
       { path: '/product-collect', title: '商品采集', icon: Link },
       { path: '/products/drafts', title: '商品草稿箱', icon: Document },
       { path: '/groups', title: '商品分组', icon: FolderOpened },
@@ -60,16 +59,11 @@ const menuItems: MenuEntry[] = [
       { path: '/ai-settings', title: 'AI 修图', icon: Setting },
     ],
   },
+  { path: '/brand-wall', title: '品牌墙', icon: PictureFilled },
 ]
 
 function openKeysForPath(path: string): string[] {
-  if (
-    path.startsWith('/products') ||
-    path.startsWith('/groups') ||
-    path.startsWith('/keywords') ||
-    path.startsWith('/product-collect') ||
-    path.startsWith('/brand-wall')
-  ) {
+  if (path.startsWith('/products') || path.startsWith('/groups') || path.startsWith('/keywords') || path.startsWith('/product-collect')) {
     return ['商品管理']
   }
   if (path.startsWith('/distribution')) return ['铺货管理']

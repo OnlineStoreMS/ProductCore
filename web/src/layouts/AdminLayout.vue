@@ -47,7 +47,7 @@ const breadcrumbs = computed(() => {
   if (route.path.startsWith('/products')) {
     return ['商品管理', '商品列表']
   }
-  if (route.path.startsWith('/brand-wall')) return ['商品管理', '品牌墙']
+  if (route.path.startsWith('/brand-wall')) return ['品牌墙']
   if (route.path.startsWith('/categories')) return ['基础数据', '商品分类']
   if (route.path.startsWith('/brands')) return ['基础数据', '品牌管理']
   if (route.path.startsWith('/groups')) return ['商品管理', '商品分组']
