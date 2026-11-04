@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search, Edit, Delete, View, Upload, Download, CopyDocument } from '@element-plus/icons-vue'
 import ProductDetailDrawer from '../../components/product/ProductDetailDrawer.vue'
@@ -22,6 +22,7 @@ import {
 import type { Brand, Category, ListedShop, Product, ProductGroup, ProductKeyword, ProductSkus } from '../../types/product'
 
 const router = useRouter()
+const route = useRoute()
 const loading = ref(false)
 const tableData = ref<Product[]>([])
 const total = ref(0)
@@ -40,6 +41,20 @@ const query = ref({
   page: 1,
   pageSize: 10,
 })
+
+function brandIdFromRoute(): number | undefined {
+  const raw = route.query.brandId
+  const value = Number(Array.isArray(raw) ? raw[0] : raw)
+  return Number.isFinite(value) && value > 0 ? value : undefined
+}
+
+function applyRouteFilters() {
+  const brandId = brandIdFromRoute()
+  if (query.value.brandId !== brandId) {
+    query.value.brandId = brandId
+    query.value.page = 1
+  }
+}
 
 const categoryOptions = computed(() => {
   const flat: { id: number; name: string }[] = []
@@ -102,7 +117,27 @@ async function loadData() {
 
 watch(query, loadData, { deep: true })
 
+watch(
+  () => route.query.brandId,
+  () => {
+    applyRouteFilters()
+  },
+)
+
+watch(
+  () => query.value.brandId,
+  (id) => {
+    const routeId = brandIdFromRoute()
+    if (id === routeId) return
+    const nextQuery = { ...route.query }
+    if (id) nextQuery.brandId = String(id)
+    else delete nextQuery.brandId
+    router.replace({ path: '/products', query: nextQuery })
+  },
+)
+
 onMounted(async () => {
+  applyRouteFilters()
   await loadMeta()
   await loadData()
 })

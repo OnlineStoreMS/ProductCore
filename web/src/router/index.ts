@@ -30,6 +30,7 @@ const router = createRouter({
         { path: 'products/create', name: 'ProductCreate', component: () => import('../views/product/ProductEdit.vue'), meta: { title: '添加商品' } },
         { path: 'products/:id/edit', name: 'ProductEdit', component: () => import('../views/product/ProductEdit.vue'), meta: { title: '编辑商品' } },
         { path: 'categories', name: 'CategoryList', component: () => import('../views/category/CategoryList.vue'), meta: { title: '商品分类' } },
+        { path: 'brand-wall', name: 'BrandWall', component: () => import('../views/brand/BrandWall.vue'), meta: { title: '品牌墙' } },
         { path: 'brands', name: 'BrandList', component: () => import('../views/brand/BrandList.vue'), meta: { title: '品牌管理' } },
         { path: 'groups', name: 'ProductGroupList', component: () => import('../views/group/ProductGroupList.vue'), meta: { title: '商品分组' } },
         { path: 'keywords', name: 'ProductKeywordList', component: () => import('../views/keyword/ProductKeywordList.vue'), meta: { title: '关键词管理' } },
