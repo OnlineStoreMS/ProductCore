@@ -140,15 +140,13 @@ function mergeHarvest(tabId, incoming) {
     if (Array.isArray(incoming.images) && incoming.images.length) cur.images = incoming.images;
     if (Array.isArray(incoming.videos)) cur.videos = incoming.videos;
   }
-  // SKU 用当前这一份整表替换，不再把上一件或别的标签页里的规格并进来。
-  if (
-    trusted &&
-    cur.clickedSku &&
-    Array.isArray(incoming.skus) &&
-    incoming.skus.length &&
-    (incoming.fromZzbStore || incoming.replaceSkus)
-  ) {
-    cur.skus = incoming.skus;
+  // SKU：当前页整表打底，再并入已抓到的 0 库存行和价格，避免无库存规格被冲掉。
+  if (cur.clickedSku && Array.isArray(incoming.skus) && incoming.skus.length) {
+    if (trusted && (incoming.fromZzbStore || incoming.replaceSkus)) {
+      cur.skus = mergeSkuState(incoming.skus, cur.skus);
+    } else {
+      cur.skus = mergeSkuState(cur.skus, incoming.skus);
+    }
   }
   tabState.set(tabId, cur);
 }
@@ -217,6 +215,9 @@ function mergeSkuState(oldList, nextList) {
     if (row.price > 0) {
       prev.price = row.price;
       prev.originalPrice = row.originalPrice || row.price;
+    } else if (!(prev.price > 0) && row.originalPrice > 0) {
+      prev.price = row.originalPrice;
+      prev.originalPrice = row.originalPrice;
     }
     if (row.stock > 0) prev.stock = row.stock;
     if (row.pic && !prev.pic) prev.pic = row.pic;
@@ -421,6 +422,18 @@ function scrapeSkuMainWorld() {
     }
     return String((row && row.specValue) || "").trim();
   };
+  const parseMoney = (v) => {
+    const text = String(v == null ? "" : v).replace(/\s+/g, "").trim();
+    if (!text || /^(?:-|—|–|\*|无|无库存|空|-1)$/.test(text)) return 0;
+    const n = Number(text.replace(/,/g, "").replace(/[^\d.-]/g, ""));
+    return isFinite(n) && n > 0 ? n : 0;
+  };
+  const parseStockNum = (v) => {
+    const stockText = String(v == null ? "" : v).replace(/\s+/g, "").trim();
+    if (!stockText || /^(?:-|—|–|\*|无|无库存|空|-1)$/.test(stockText)) return 0;
+    const stockNum = Math.round(Number(stockText.replace(/,/g, "").replace(/[^\d.-]/g, "")));
+    return isFinite(stockNum) && stockNum > 0 ? stockNum : 0;
+  };
   const push = (name, price, stock) => {
     const raw = String(name || "")
       .replace(/\s*商品ID[:：]\s*\d+\s*/g, " ")
@@ -429,6 +442,23 @@ function scrapeSkuMainWorld() {
     const parsed = parseSkuName(raw);
     const specValue = parsed.specValue;
     if (!specValue || /^\d+$/.test(specValue) || /请输入SKU|计算价格设置/.test(specValue)) return;
+    const keySrc = {
+      specs: parsed.specs,
+      specValue,
+    };
+    const key = rowKey(keySrc);
+    if (!key) return;
+    const priceNum = parseMoney(price);
+    const stockNum = parseStockNum(stock);
+    const prev = seen[key];
+    if (prev) {
+      if (priceNum > 0) {
+        prev.price = priceNum;
+        prev.originalPrice = priceNum;
+      }
+      if (stockNum > 0) prev.stock = stockNum;
+      return;
+    }
     const row = {
       name: raw || specValue,
       specs: parsed.specs,
@@ -436,30 +466,49 @@ function scrapeSkuMainWorld() {
       specName: parsed.specName,
       specValue,
       pic: "",
-      price: 0,
-      originalPrice: 0,
-      stock: 0,
+      price: priceNum,
+      originalPrice: priceNum,
+      stock: stockNum,
     };
-    const key = rowKey(row);
-    if (!key || seen[key]) return;
-    seen[key] = 1;
-    const n = Number(String(price == null ? "" : price).replace(/,/g, "").replace(/[^\d.-]/g, ""));
-    const priceNum = isFinite(n) && n > 0 ? n : 0;
-    const stockText = String(stock || "").replace(/\s+/g, "").trim();
-    let stockNum = 0;
-    if (stockText && !/^(?:-|—|–|\*|无|无库存|空|-1)$/.test(stockText)) {
-      stockNum = Math.round(Number(stockText.replace(/,/g, "").replace(/[^\d.-]/g, "")));
-      if (!isFinite(stockNum) || stockNum < 0) stockNum = 0;
-    }
-    row.price = priceNum;
-    row.originalPrice = priceNum;
-    row.stock = stockNum;
+    seen[key] = row;
     rows.push(row);
   };
+  const harvestObjects = (list) => {
+    (list || []).forEach((item) => {
+      if (!item || typeof item !== "object") return;
+      const name =
+        item["规格名称"] ||
+        item["SKU名称"] ||
+        item.skuName ||
+        item.name ||
+        (item.specName && item.specValue ? item.specName + ":" + item.specValue : "");
+      const price =
+        item["原价"] ||
+        item["销售价"] ||
+        item["市场价"] ||
+        item.originPrice ||
+        item.originalPrice ||
+        item.salePrice ||
+        item.price;
+      const stock = item["库存"] != null ? item["库存"] : item.quantity != null ? item.quantity : item.stock;
+      if (name) push(name, price, stock);
+    });
+  };
+  try {
+    const cache = window.layui && window.layui.table && window.layui.table.cache;
+    if (cache) Object.keys(cache).forEach((k) => harvestObjects(cache[k]));
+  } catch (e) {}
+  try {
+    document.querySelectorAll(".el-table, .layui-table-view").forEach((el) => {
+      const vue = el.__vue__;
+      const data = vue && vue.store && vue.store.states && vue.store.states.data;
+      if (Array.isArray(data)) harvestObjects(data);
+    });
+  } catch (e) {}
   const re =
-    /([^\n]{2,120}[:：][^\n]{1,160})\n\s*商品ID[:：]\s*\d+\s*\n\s*(\d+(?:\.\d+)?)\s*\n\s*([^\n]*)\s*\n\s*([^\n]*)/g;
+    /([^\n]{2,120}[:：][^\n]{1,160})\n\s*商品ID[:：]\s*\d+\s*\n\s*(\d+(?:\.\d+)?|-)\s*\n\s*([^\n]*)\s*\n\s*([^\n]*)/g;
   let m;
-  while ((m = re.exec(text))) push(m[1], m[2], m[4]);
+  while ((m = re.exec(text))) push(m[1], parseMoney(m[2]) || parseMoney(m[3]), m[4]);
   return rows;
 }
 

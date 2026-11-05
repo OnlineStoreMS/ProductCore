@@ -204,11 +204,40 @@
       }
       videos.push({ src: u });
     };
+    const skuItemName = (item) => {
+      if (!item) return "";
+      return (
+        item.name ||
+        item.skuName ||
+        item["规格名称"] ||
+        item["SKU名称"] ||
+        (item.specName && item.specValue ? item.specName + ":" + item.specValue : "")
+      );
+    };
+    const skuItemPrice = (item) =>
+      pickPrice(
+        item && item.price,
+        item && item.salePrice,
+        item && item.originPrice,
+        item && item.originalPrice,
+        item && item.skuPrice,
+        item && item["原价"],
+        item && item["销售价"],
+        item && item["市场价"]
+      );
+    const skuItemStock = (item) => {
+      if (!item) return 0;
+      if (item.quantity != null && item.quantity !== "") return parseStock(item.quantity);
+      if (item.stock != null && item.stock !== "") return parseStock(item.stock);
+      if (item["库存"] != null && item["库存"] !== "") return parseStock(item["库存"]);
+      return 0;
+    };
     const addSku = (item) => {
-      const parsed = parseSkuName(item && item.name);
+      const parsed = parseSkuName(skuItemName(item));
       if (!parsed.specValue) return;
+      const price = skuItemPrice(item);
       skus.push(
-        skuRowFromParsed(item && item.name, parsed, item.url, item.price, item.price, item.quantity)
+        skuRowFromParsed(skuItemName(item), parsed, item && item.url, price, price, skuItemStock(item))
       );
     };
     const list = lsJson("fileList_tb");
@@ -246,15 +275,31 @@
         info.item.videos.forEach((v) => addVid(v && v.url));
       }
     }
-    if (pack && Array.isArray(pack.skuInfos)) {
-      pack.skuInfos.forEach((item) => {
-        const parsed = parseSkuName(item && item.name);
+    const packSkuLists = [];
+    const pushSkuList = (arr) => {
+      if (Array.isArray(arr) && arr.length) packSkuLists.push(arr);
+    };
+    pushSkuList(pack && pack.skuInfos);
+    pushSkuList(pack && pack.skuList);
+    pushSkuList(pack && pack.skus);
+    if (pack && pack.myItemInfo) {
+      pushSkuList(pack.myItemInfo.skuInfos);
+      pushSkuList(pack.myItemInfo.skuList);
+      pushSkuList(pack.myItemInfo.skus);
+      if (pack.myItemInfo.item) {
+        pushSkuList(pack.myItemInfo.item.skuInfos);
+        pushSkuList(pack.myItemInfo.item.skus);
+      }
+    }
+    packSkuLists.forEach((list) => {
+      list.forEach((item) => {
+        const parsed = parseSkuName(skuItemName(item));
         if (!parsed.specValue) return;
         const key = skuRowKey({ specs: parsed.specs, specValue: parsed.specValue });
         const prev = skus.find((s) => skuRowKey(s) === key);
-        const price = num(item.price);
-        const stock = parseStock(item.quantity);
-        const pic = clean(item.url);
+        const price = skuItemPrice(item);
+        const stock = skuItemStock(item);
+        const pic = clean(item && item.url);
         if (!prev) {
           addSku(item);
           return;
@@ -266,7 +311,7 @@
         if (stock > 0) prev.stock = stock;
         if (pic) prev.pic = pic;
       });
-    }
+    });
     return {
       images,
       videos,
@@ -616,10 +661,11 @@
   function parseSkuByText(push) {
     const raw = ((document.body && document.body.innerText) || "").replace(/\r/g, "");
     const multiline =
-      /([^\n]{2,120}[:：][^\n]{1,160})\n\s*商品ID[:：]\s*\d+\s*\n\s*(\d+(?:\.\d+)?)\s*\n\s*([^\n]*)\s*\n\s*([^\n]*)/g;
+      /([^\n]{2,120}[:：][^\n]{1,160})\n\s*商品ID[:：]\s*\d+\s*\n\s*(\d+(?:\.\d+)?|-)\s*\n\s*([^\n]*)\s*\n\s*([^\n]*)/g;
     let m;
     while ((m = multiline.exec(raw))) {
-      push(m[1], "", m[2], m[2], m[4]);
+      const price = pickPrice(m[2], m[3]);
+      push(m[1], "", price, price, m[4]);
     }
     const label =
       "商品规格|颜色分类|颜色|尺码分类|尺码|尺寸|规格|套餐类型|套餐|款式|型号|版本|网络类型";
@@ -630,7 +676,8 @@
       "g"
     );
     while ((m = compact.exec(raw))) {
-      push(m[1], "", m[2], m[2], m[4]);
+      const price = pickPrice(m[2], m[3]);
+      push(m[1], "", price, price, m[4]);
     }
   }
 
@@ -683,7 +730,8 @@
       const sale = saleCol >= 0 ? moneyIn(cells[saleCol]) : 0;
       const market = marketCol >= 0 ? moneyIn(cells[marketCol]) : 0;
       const stock = stockCol >= 0 ? cellValue(cells[stockCol]) : "";
-      push(name, img ? pickSrc(img) : "", origin || sale, market || sale || origin, stock);
+      const price = pickPrice(origin, sale, market);
+      push(name, img ? pickSrc(img) : "", price, pickPrice(market, sale, origin, price), stock);
     });
   }
 
@@ -850,10 +898,18 @@
     return s;
   }
 
+  function pickPrice() {
+    for (let i = 0; i < arguments.length; i++) {
+      const n = num(arguments[i]);
+      if (n > 0) return n;
+    }
+    return 0;
+  }
+
   function num(v) {
     if (typeof v === "number") return isFinite(v) && v > 0 ? v : 0;
     const raw = String(v == null ? "" : v).replace(/,/g, "").trim();
-    if (!raw || /^(?:-|—|–|\*|无|-1)$/.test(raw)) return 0;
+    if (!raw || /^(?:-|—|–|\*|无|无库存|空|-1)$/.test(raw)) return 0;
     const n = Number(raw.replace(/[^\d.-]/g, ""));
     if (!isFinite(n) || n < 0) return 0;
     return n;
