@@ -165,7 +165,7 @@ function openBrand(brand: Brand) {
 }
 
 .logo-fallback {
-  font-size: 36px;
+  font-size: 28px;
   font-weight: 700;
   color: #ff7700;
   line-height: 1;
@@ -173,7 +173,7 @@ function openBrand(brand: Brand) {
 
 .brand-name {
   width: 100%;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: rgba(0, 0, 0, 0.85);
   white-space: nowrap;
