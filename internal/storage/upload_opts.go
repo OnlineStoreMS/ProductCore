@@ -192,10 +192,18 @@ func productResourceSegments(opts UploadOptions) []string {
 }
 
 func detectContentType(filename, headerCT string) string {
+	if strings.ToLower(filepath.Ext(filename)) == ".svg" {
+		return "image/svg+xml"
+	}
 	if headerCT != "" && headerCT != "application/octet-stream" {
 		ct := strings.ToLower(strings.TrimSpace(strings.Split(headerCT, ";")[0]))
 		if ct == "image/jfif" || ct == "image/pjpeg" {
 			return "image/jpeg"
+		}
+		if ct == "image/svg" || ct == "text/xml" || ct == "application/xml" {
+			if strings.ToLower(filepath.Ext(filename)) == ".svg" {
+				return "image/svg+xml"
+			}
 		}
 		return ct
 	}

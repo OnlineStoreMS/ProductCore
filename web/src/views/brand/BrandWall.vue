@@ -123,8 +123,8 @@ function openBrand(brand: Brand) {
 
 .wall-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 20px;
   padding: 4px 0 8px;
 }
 
@@ -133,11 +133,11 @@ function openBrand(brand: Brand) {
   border: 1px solid #ebebeb;
   background: #fff;
   border-radius: 10px;
-  padding: 16px 12px 14px;
+  padding: 22px 16px 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
   text-align: center;
@@ -150,24 +150,22 @@ function openBrand(brand: Brand) {
 }
 
 .logo-wrap {
-  width: 140px;
-  height: 56px;
+  width: 100%;
+  height: 96px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .logo-img {
-  max-width: 140px;
-  max-height: 56px;
-  width: auto;
-  height: auto;
+  width: 100%;
+  height: 96px;
   object-fit: contain;
   background: transparent;
 }
 
 .logo-fallback {
-  font-size: 28px;
+  font-size: 36px;
   font-weight: 700;
   color: #ff7700;
   line-height: 1;
@@ -175,7 +173,7 @@ function openBrand(brand: Brand) {
 
 .brand-name {
   width: 100%;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: rgba(0, 0, 0, 0.85);
   white-space: nowrap;
