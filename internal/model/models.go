@@ -18,11 +18,15 @@ type Brand struct {
 	BaseModel
 	TenantID     uint64 `gorm:"index;not null;default:1" json:"tenantId"`
 	Name         string `gorm:"size:64;not null" json:"name"`
-	Logo         string `gorm:"size:512" json:"logo"`
-	FirstLetter  string `gorm:"size:1" json:"firstLetter"`
-	Sort         int    `gorm:"default:0" json:"sort"`
-	ShowStatus   int8   `gorm:"default:1" json:"showStatus"` // 0隐藏 1显示
-	Description  string `gorm:"size:512" json:"description"`
+	Logo          string `gorm:"size:512" json:"logo"`
+	LogoBg        string `gorm:"size:32" json:"logoBg"`
+	Website       string `gorm:"size:512" json:"website"`
+	Agent         string `gorm:"size:256" json:"agent"`
+	AuthFilesJSON string `gorm:"type:text" json:"-"`
+	FirstLetter   string `gorm:"size:1" json:"firstLetter"`
+	Sort          int    `gorm:"default:0" json:"sort"`
+	ShowStatus    int8   `gorm:"default:1" json:"showStatus"` // 0隐藏 1显示
+	Description   string `gorm:"size:512" json:"description"`
 }
 
 func (Brand) TableName() string { return "brands" }

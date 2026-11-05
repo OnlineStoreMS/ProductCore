@@ -1,7 +1,10 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
+	"regexp"
+	"strings"
 
 	"productcore/internal/dto"
 	"productcore/internal/model"
@@ -9,6 +12,19 @@ import (
 
 	"gorm.io/gorm"
 )
+
+var logoBgPattern = regexp.MustCompile(`(?i)^(#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})|(rgb|rgba|hsl|hsla)\(\s*[\d.%,\s/]+\))$`)
+
+func normalizeLogoBg(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" || strings.EqualFold(s, "transparent") {
+		return ""
+	}
+	if !logoBgPattern.MatchString(s) {
+		return ""
+	}
+	return s
+}
 
 type BrandService struct {
 	repo *repo.BrandRepo
@@ -38,9 +54,11 @@ func (s *BrandService) List(keyword string) ([]dto.BrandDTO, error) {
 }
 
 func (s *BrandService) Create(in *dto.BrandDTO) (*dto.BrandDTO, error) {
-	b := model.Brand{TenantID: s.tenantID, 
-		Name: in.Name, Logo: in.Logo, FirstLetter: in.FirstLetter,
-		Sort: in.Sort, ShowStatus: in.ShowStatus,
+	b := model.Brand{TenantID: s.tenantID,
+		Name: in.Name, Logo: in.Logo, LogoBg: normalizeLogoBg(in.LogoBg),
+		Website: strings.TrimSpace(in.Website), Agent: strings.TrimSpace(in.Agent),
+		AuthFilesJSON: encodeBrandAuthFiles(in.AuthFiles),
+		FirstLetter: in.FirstLetter, Sort: in.Sort, ShowStatus: in.ShowStatus,
 	}
 	if b.FirstLetter == "" {
 		b.FirstLetter = firstLetter(in.Name)
@@ -60,7 +78,10 @@ func (s *BrandService) Update(id uint64, in *dto.BrandDTO) (*dto.BrandDTO, error
 		}
 		return nil, err
 	}
-	b.Name, b.Logo, b.FirstLetter, b.Sort, b.ShowStatus = in.Name, in.Logo, in.FirstLetter, in.Sort, in.ShowStatus
+	b.Name, b.Logo, b.LogoBg = in.Name, in.Logo, normalizeLogoBg(in.LogoBg)
+	b.Website, b.Agent = strings.TrimSpace(in.Website), strings.TrimSpace(in.Agent)
+	b.AuthFilesJSON = encodeBrandAuthFiles(in.AuthFiles)
+	b.FirstLetter, b.Sort, b.ShowStatus = in.FirstLetter, in.Sort, in.ShowStatus
 	if b.FirstLetter == "" {
 		b.FirstLetter = firstLetter(b.Name)
 	}
@@ -88,9 +109,45 @@ func (s *BrandService) Delete(id uint64) error {
 func (s *BrandService) toDTO(b *model.Brand) dto.BrandDTO {
 	count, _ := s.repo.CountProducts(s.tenantID, b.ID)
 	return dto.BrandDTO{
-		ID: b.ID, Name: b.Name, Logo: b.Logo, FirstLetter: b.FirstLetter,
-		Sort: b.Sort, ShowStatus: b.ShowStatus, ProductCount: count,
+		ID: b.ID, Name: b.Name, Logo: b.Logo, LogoBg: b.LogoBg,
+		Website: b.Website, Agent: b.Agent, AuthFiles: decodeBrandAuthFiles(b.AuthFilesJSON),
+		FirstLetter: b.FirstLetter, Sort: b.Sort, ShowStatus: b.ShowStatus, ProductCount: count,
 	}
+}
+
+func encodeBrandAuthFiles(files []dto.BrandAuthFileDTO) string {
+	out := make([]dto.BrandAuthFileDTO, 0, len(files))
+	for _, f := range files {
+		url := strings.TrimSpace(f.URL)
+		if url == "" {
+			continue
+		}
+		name := strings.TrimSpace(f.Name)
+		if name == "" {
+			name = url
+		}
+		out = append(out, dto.BrandAuthFileDTO{Name: name, URL: url})
+	}
+	if len(out) == 0 {
+		return ""
+	}
+	raw, err := json.Marshal(out)
+	if err != nil {
+		return ""
+	}
+	return string(raw)
+}
+
+func decodeBrandAuthFiles(raw string) []dto.BrandAuthFileDTO {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return []dto.BrandAuthFileDTO{}
+	}
+	var files []dto.BrandAuthFileDTO
+	if err := json.Unmarshal([]byte(s), &files); err != nil {
+		return []dto.BrandAuthFileDTO{}
+	}
+	return files
 }
 
 func firstLetter(name string) string {

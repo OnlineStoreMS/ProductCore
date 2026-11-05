@@ -107,6 +107,8 @@ func extFromContentType(ct string) string {
 		return ".gif"
 	case "image/svg+xml", "image/svg":
 		return ".svg"
+	case "application/pdf":
+		return ".pdf"
 	case "video/mp4":
 		return ".mp4"
 	case "video/webm":
@@ -144,6 +146,8 @@ func commonResourceDir(resource string) []string {
 		return []string{"platform", "logo"}
 	case "brand_logo":
 		return []string{"brand", "logo"}
+	case "brand_auth":
+		return []string{"brand", "auth"}
 	case "distribution":
 		return []string{"distribution"}
 	case "video", "video_common":
@@ -192,8 +196,12 @@ func productResourceSegments(opts UploadOptions) []string {
 }
 
 func detectContentType(filename, headerCT string) string {
-	if strings.ToLower(filepath.Ext(filename)) == ".svg" {
+	ext := strings.ToLower(filepath.Ext(filename))
+	if ext == ".svg" {
 		return "image/svg+xml"
+	}
+	if ext == ".pdf" {
+		return "application/pdf"
 	}
 	if headerCT != "" && headerCT != "application/octet-stream" {
 		ct := strings.ToLower(strings.TrimSpace(strings.Split(headerCT, ";")[0]))
@@ -207,7 +215,7 @@ func detectContentType(filename, headerCT string) string {
 		}
 		return ct
 	}
-	switch strings.ToLower(filepath.Ext(filename)) {
+	switch ext {
 	case ".jpg", ".jpeg", ".jfif":
 		return "image/jpeg"
 	case ".png":
@@ -218,6 +226,8 @@ func detectContentType(filename, headerCT string) string {
 		return "image/gif"
 	case ".svg":
 		return "image/svg+xml"
+	case ".pdf":
+		return "application/pdf"
 	case ".mp4":
 		return "video/mp4"
 	case ".webm":

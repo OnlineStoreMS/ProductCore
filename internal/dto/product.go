@@ -131,14 +131,23 @@ type UpdatePublishStatusRequest struct {
 	PublishStatus int8 `json:"publishStatus"`
 }
 
+type BrandAuthFileDTO struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+}
+
 type BrandDTO struct {
-	ID           uint64 `json:"id,omitempty"`
-	Name         string `json:"name" binding:"required"`
-	Logo         string `json:"logo"`
-	FirstLetter  string `json:"firstLetter"`
-	Sort         int    `json:"sort"`
-	ShowStatus   int8   `json:"showStatus"`
-	ProductCount int64  `json:"productCount,omitempty"`
+	ID           uint64             `json:"id,omitempty"`
+	Name         string             `json:"name" binding:"required"`
+	Logo         string             `json:"logo"`
+	LogoBg       string             `json:"logoBg"`
+	Website      string             `json:"website"`
+	Agent        string             `json:"agent"`
+	AuthFiles    []BrandAuthFileDTO `json:"authFiles"`
+	FirstLetter  string             `json:"firstLetter"`
+	Sort         int                `json:"sort"`
+	ShowStatus   int8               `json:"showStatus"`
+	ProductCount int64              `json:"productCount,omitempty"`
 }
 
 type BrandReorderDTO struct {

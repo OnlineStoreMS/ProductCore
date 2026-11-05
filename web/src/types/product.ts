@@ -1,7 +1,16 @@
+export interface BrandAuthFile {
+  name: string
+  url: string
+}
+
 export interface Brand {
   id: number
   name: string
   logo?: string
+  logoBg?: string
+  website?: string
+  agent?: string
+  authFiles?: BrandAuthFile[]
   firstLetter: string
   sort: number
   showStatus: 0 | 1

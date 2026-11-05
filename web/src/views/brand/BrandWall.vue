@@ -49,6 +49,11 @@ async function loadData() {
 
 onMounted(loadData)
 
+function logoWrapStyle(brand: Brand) {
+  if (!brand.logoBg) return undefined
+  return { background: brand.logoBg }
+}
+
 function openBrand(brand: Brand) {
   if (justDragged.value) {
     justDragged.value = false
@@ -144,7 +149,7 @@ async function persistOrder() {
           @dragend="resetDrag"
           @click="openBrand(brand)"
         >
-          <div class="logo-wrap">
+          <div class="logo-wrap" :class="{ 'has-bg': !!brand.logoBg }" :style="logoWrapStyle(brand)">
             <img
               v-if="brand.logo"
               :src="brand.logo"
@@ -250,6 +255,12 @@ async function persistOrder() {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.logo-wrap.has-bg {
+  border-radius: 8px;
+  padding: 8px;
+  box-sizing: border-box;
 }
 
 .logo-img {

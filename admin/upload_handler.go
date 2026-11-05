@@ -66,13 +66,18 @@ func (h *UploadHandler) Upload(c *gin.Context) {
 		response.Fail(c, http.StatusBadRequest, "file required")
 		return
 	}
-	if msg := validateImageFile(file); msg != "" {
-		response.Fail(c, http.StatusBadRequest, msg)
-		return
-	}
 	opts := storage.UploadOptionsFromForm(uploadFormValues(c), false)
 	if err := opts.Validate(); err != nil {
 		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if opts.Resource == "brand_auth" {
+		if msg := validateBrandAuthFile(file); msg != "" {
+			response.Fail(c, http.StatusBadRequest, msg)
+			return
+		}
+	} else if msg := validateImageFile(file); msg != "" {
+		response.Fail(c, http.StatusBadRequest, msg)
 		return
 	}
 	url, err := h.store.Upload(file, opts)
@@ -349,6 +354,8 @@ func fileContentType(file *multipart.FileHeader) string {
 		return "image/webp"
 	case ".svg":
 		return "image/svg+xml"
+	case ".pdf":
+		return "application/pdf"
 	case ".mp4":
 		return "video/mp4"
 	case ".webm":
@@ -397,4 +404,23 @@ func validateImageFile(file *multipart.FileHeader) string {
 		return "unsupported image type (jpg/jpeg/jfif/png/webp/svg)"
 	}
 	return ""
+}
+
+const maxBrandAuthSize = 20 << 20 // 20MB
+
+func validateBrandAuthFile(file *multipart.FileHeader) string {
+	if file.Size > maxBrandAuthSize {
+		return "file too large (max 20MB)"
+	}
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	switch ext {
+	case ".jpg", ".jpeg", ".jfif", ".png", ".webp", ".gif", ".svg", ".pdf":
+		return ""
+	}
+	ct := strings.ToLower(strings.Split(fileContentType(file), ";")[0])
+	switch ct {
+	case "image/jpeg", "image/png", "image/webp", "image/jpg", "image/jfif", "image/pjpeg", "image/gif", "image/svg+xml", "image/svg", "application/pdf":
+		return ""
+	}
+	return "unsupported file type (图片或 PDF)"
 }
