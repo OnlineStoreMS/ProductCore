@@ -45,11 +45,13 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const tabId = sender.tab && sender.tab.id;
   if (msg && msg.type === "pc-collect-harvest" && tabId) {
-    hydrateTab(tabId, () => {
-      mergeHarvest(tabId, msg.payload || {});
-      persistTab(tabId);
-      pushToTab(tabId);
-      sendResponse({ ok: true });
+    resolveHarvestTab(sender, msg.payload || {}, (targetId) => {
+      hydrateTab(targetId, () => {
+        mergeHarvest(targetId, msg.payload || {});
+        persistTab(targetId);
+        pushToTab(targetId);
+        sendResponse({ ok: true });
+      });
     });
     return true;
   }
@@ -98,11 +100,37 @@ function isJunkTitle(next) {
   );
 }
 
+function resolveHarvestTab(sender, payload, done) {
+  const tab = sender.tab;
+  const tabId = tab && tab.id;
+  const url = String((tab && tab.url) || "");
+  if (!tabId) return done(tabId);
+  if (/item\.taobao|detail\.tmall/i.test(url)) return done(tabId);
+  const opener = tab.openerTabId;
+  if (opener) return done(opener);
+  const itemId = String((payload && payload.itemId) || "");
+  hydrateAll(() => {
+    let found = 0;
+    tabState.forEach((state, id) => {
+      if (found) return;
+      if (itemId && state.itemId && String(state.itemId) === itemId) found = id;
+    });
+    if (!found) {
+      tabState.forEach((state, id) => {
+        if (found) return;
+        if (state.clickedMedia || state.clickedSku) found = id;
+      });
+    }
+    done(found || tabId);
+  });
+}
+
 function mergeHarvest(tabId, incoming) {
   let cur = tabState.get(tabId) || emptyState();
   if (incoming.resetSession) {
     const sameItem = incoming.itemId && cur.itemId && incoming.itemId === cur.itemId;
     if (!sameItem) cur = emptyState();
+    else if (!(cur.images && cur.images.length)) cur.clickedMedia = false;
   }
   if (incoming.itemId && cur.itemId && incoming.itemId !== cur.itemId) {
     cur = emptyState();
@@ -153,21 +181,29 @@ function mergeHarvest(tabId, incoming) {
 
 function storeMatchesPage(cur, incoming) {
   if (incoming.replaceSkus && !incoming.fromZzbStore && !incoming.zzbItemId) return true;
-  if (!incoming.fromZzbStore && !incoming.zzbTitle && !incoming.zzbItemId) return false;
-  const zzb = String(incoming.zzbItemId || "");
+  if (!incoming.fromZzbStore && !incoming.zzbTitle && !incoming.zzbItemId && !incoming.listItemId) return false;
   const page = String(incoming.itemId || (cur && cur.itemId) || "");
+  const zzb = String(incoming.zzbItemId || incoming.listItemId || "");
+  const listId = String(incoming.listItemId || "");
+  if (listId && page && listId === page) return true;
   return !!(zzb && page && zzb === page);
 }
 
-/** 点过主图/SKU 后，至尊宝 pack 可能还是上一件，但 fileList 已经是当前页。 */
+/** 点过主图/SKU 后收下弹层数据：iframe 常没有商品 ID，pack 还可能是上一件。 */
 function acceptClickedStore(cur, incoming) {
   if (!incoming.fromZzbStore) return false;
   const hasMedia = (incoming.images && incoming.images.length) || (incoming.videos && incoming.videos.length);
   const hasSkus = incoming.skus && incoming.skus.length;
-  if (cur.clickedMedia && hasMedia && incoming.zzbPackMismatch) return true;
-  if (cur.clickedSku && hasSkus && incoming.zzbPackMismatch) return true;
-  if (cur.clickedMedia && hasMedia && !incoming.zzbItemId) return true;
-  if (cur.clickedSku && hasSkus && !incoming.zzbItemId) return true;
+  const page = String((cur && cur.itemId) || incoming.itemId || "");
+  const listId = String(incoming.listItemId || "");
+  const zzb = String(incoming.zzbItemId || "");
+  if (listId && page && listId === page) return true;
+  if (cur.clickedMedia && hasMedia && (!(cur.images && cur.images.length) || incoming.zzbPackMismatch || !zzb || (zzb && page && zzb !== page))) {
+    return true;
+  }
+  if (cur.clickedSku && hasSkus && (!(cur.skus && cur.skus.length) || incoming.zzbPackMismatch || !zzb || (zzb && page && zzb !== page))) {
+    return true;
+  }
   return false;
 }
 
@@ -275,14 +311,129 @@ function pushToTab(tabId) {
   });
 }
 
-setInterval(pollSkuFrames, 1500);
+setInterval(pollCollectFrames, 1500);
 
-function pollSkuFrames() {
+function pollCollectFrames() {
   hydrateAll(() => {
     tabState.forEach((state, tabId) => {
+      if (state.clickedMedia) pollOneMediaTab(state, tabId);
       pollOneSkuTab(state, tabId);
     });
   });
+}
+
+function pollOneMediaTab(state, tabId) {
+  chrome.scripting.executeScript(
+    {
+      target: { tabId, allFrames: true },
+      world: "MAIN",
+      func: scrapeZzbStoreMainWorld,
+    },
+    (results) => {
+      if (chrome.runtime.lastError || !results) return;
+      let images = [];
+      let videos = [];
+      let listItemId = "";
+      let packItemId = "";
+      results.forEach((item) => {
+        const data = item && item.result;
+        if (!data) return;
+        if (Array.isArray(data.images) && data.images.length > images.length) images = data.images;
+        if (Array.isArray(data.videos) && data.videos.length >= videos.length) videos = data.videos;
+        if (data.listItemId) listItemId = data.listItemId;
+        if (data.packItemId) packItemId = data.packItemId;
+      });
+      if (!images.length && !videos.length) return;
+      mergeHarvest(tabId, {
+        fromZzbStore: true,
+        zzbPackMismatch: true,
+        listItemId,
+        packItemId,
+        zzbItemId: listItemId || packItemId,
+        images,
+        videos,
+      });
+      persistTab(tabId);
+      pushToTab(tabId);
+    }
+  );
+}
+
+function scrapeZzbStoreMainWorld() {
+  const skip = /favicon|sprite|\/icon|logo_|\.svg(\?|$)|zzbtool\.com|\.js(\?|$)|css(\?|$)/i;
+  const parse = (raw) => {
+    try {
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  };
+  const readKey = (key) => parse(localStorage.getItem(key) || sessionStorage.getItem(key));
+  const list = [];
+  const seen = {};
+  ["fileList_tb", "fileList_tm", "fileList_ali", "fileList"].forEach((key) => {
+    const arr = readKey(key);
+    if (!Array.isArray(arr)) return;
+    arr.forEach((item) => {
+      if (!item) return;
+      const mark = String(item.url || "") + "\0" + String(item.cateType || "") + "\0" + String(item.name || "");
+      if (seen[mark]) return;
+      seen[mark] = 1;
+      list.push(item);
+    });
+  });
+  const pack = readKey("sku复制传值数据");
+  const clean = (u) => {
+    if (!u) return "";
+    let s = String(u).trim().split(/[\s"'<>;)\\]/)[0];
+    if (!s) return "";
+    if (s.indexOf("//") === 0) s = "http:" + s;
+    if (s.indexOf(".jpg_.webp") > 0) s = s.replace(".jpg_.webp", ".jpg");
+    if (!/^https?:/i.test(s)) return "";
+    return s;
+  };
+  const isImg = (u) => {
+    if (!u || skip.test(u)) return false;
+    if (!/alicdn\.com|aliimg|imgextra|tbcdn/i.test(u)) return false;
+    return /\.(jpe?g|png|webp)(\?|$)/i.test(u) || /imgextra|\/bao\/uploaded\//i.test(u);
+  };
+  const isVid = (u) => /\.(mp4|mov|webm|avi)(\?|$)/i.test(u) || /cloudvideo/i.test(u);
+  const images = [];
+  const videos = [];
+  const skus = [];
+  const seenImg = {};
+  list.forEach((item) => {
+    const url = clean(item.url);
+    const cate = Number(item.cateType);
+    const ft = Number(item.fileType);
+    if (ft === 2 || cate === 4 || isVid(url)) {
+      if (url && isVid(url)) videos.push({ src: url });
+      return;
+    }
+    if (!isImg(url) || seenImg[url]) return;
+    seenImg[url] = 1;
+    let kind = "main";
+    if (cate === 3) kind = "detail";
+    else if (cate === 2) kind = "sku";
+    images.push({ src: url, kind: kind });
+    if (cate === 2 && item.name) {
+      skus.push({ name: item.name, specValue: item.name, pic: url, price: Number(item.price) || 0, stock: 0 });
+    }
+  });
+  const pickId = (raw) => (/^\d{5,}$/.test(String(raw || "").trim()) ? String(raw).trim() : "");
+  let listItemId = "";
+  list.forEach((item) => {
+    if (listItemId) return;
+    listItemId =
+      pickId(item.itemId) ||
+      pickId(item.numIid) ||
+      pickId(item.num_iid) ||
+      pickId(item.goodsId) ||
+      ((String(item.url || "").match(/[?&]id=(\d{5,})/) || [])[1] || "");
+  });
+  const packItem = pack && pack.myItemInfo && pack.myItemInfo.item;
+  const packItemId = String((pack && pack.itemId) || (packItem && (packItem.itemId || packItem.numIid)) || "");
+  return { images, videos, skus, listItemId, packItemId };
 }
 
 function pollOneSkuTab(state, tabId) {

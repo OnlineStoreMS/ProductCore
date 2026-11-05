@@ -7,34 +7,35 @@
     "click",
     (ev) => {
       if (ev.target && ev.target.closest && ev.target.closest("#pc-collect-panel")) return;
-      const bar = findZzbTitleBar(ev.target);
-      if (bar) {
-        const btn = clickLabel(ev.target);
-        if (!btn || /标题|链\+标/.test(btn)) {
-          const pageTitle = titleNearBar(bar) || extractZzbTitle();
-          const stored = harvestZzbStore();
-          const pageId = pageItemId();
-          const sameItem = stored.zzbItemId && pageId && stored.zzbItemId === pageId;
-          const title = pageTitle || (sameItem ? stored.storedTitle : "");
-          report({
-            clickedTitle: true,
-            title: title || undefined,
-            titleFromPage: !!pageTitle,
-            zzbItemId: stored.zzbItemId || undefined,
-            itemId: pageId || undefined,
-            fromZzb: true,
-          });
-        }
+      const kind = toolClickKind(ev);
+      if (kind === "title") {
+        const pageTitle = extractZzbTitle();
+        const stored = harvestZzbStore();
+        const pageId = pageItemId();
+        const sameItem = stored.zzbItemId && pageId && stored.zzbItemId === pageId;
+        const title = pageTitle || (sameItem ? stored.storedTitle : "");
+        report({
+          clickedTitle: true,
+          title: title || undefined,
+          titleFromPage: !!pageTitle,
+          zzbItemId: stored.zzbItemId || undefined,
+          itemId: pageId || undefined,
+          fromZzb: true,
+        });
         return;
       }
-      const t = clickLabel(ev.target);
-      if (!t || t.length > 20) return;
-      if (t === "手机端主图视频SKU" || t === "主图视频SKU" || t === "手机端主图视频") {
-        report({ clickedMedia: true });
+      if (kind === "media") {
+        const payload = collectScanPayload();
+        payload.clickedMedia = true;
+        payload.itemId = payload.itemId || pageItemId() || undefined;
+        report(payload);
         return;
       }
-      if (t === "SKU工具") {
-        report({ clickedSku: true });
+      if (kind === "sku") {
+        const payload = collectScanPayload();
+        payload.clickedSku = true;
+        payload.itemId = payload.itemId || pageItemId() || undefined;
+        report(payload);
       }
     },
     true
@@ -76,6 +77,13 @@
   }
 
   function scan() {
+    const payload = collectScanPayload();
+    if (payload.fromZzbStore || payload.replaceSkus || payload.itemId || payload.url) {
+      report(payload);
+    }
+  }
+
+  function collectScanPayload() {
     const payload = {
       platform: /tmall/i.test(href) ? "tmall" : "taobao",
     };
@@ -86,34 +94,59 @@
     const tableSkus = extractSkus();
     // 至尊宝 localStorage 全站共用。优先认和当前商品 ID 一致的那份；
     // pack 还是上一件、但 fileList 已更新时标 zzbPackMismatch，点过工具后仍可入库。
-    const storeOk = !!stored.zzbItemId && (!pageId || stored.zzbItemId === pageId);
-    const packMismatch = !!(pageId && stored.packItemId && stored.packItemId !== pageId);
+    const listMatch = !!(pageId && stored.listItemId && stored.listItemId === pageId);
+    const storeOk = listMatch || (!!stored.zzbItemId && !!pageId && stored.zzbItemId === pageId);
+    const packMismatch = !!(stored.packItemId && ((pageId && stored.packItemId !== pageId) || listMatch));
     const hasMedia = (stored.images && stored.images.length) || (stored.videos && stored.videos.length);
-    if (stored.fromZzbStore && (storeOk || (packMismatch && hasMedia) || (!stored.zzbItemId && hasMedia))) {
+    const hasSkus = (stored.skus && stored.skus.length) || tableSkus.length;
+    // iframe 里常常没有商品 URL：只要弹层已经写出 fileList，就上报，由后台按点击状态决定是否入库。
+    if (stored.fromZzbStore && (storeOk || hasMedia || hasSkus)) {
       payload.fromZzbStore = true;
-      payload.zzbItemId = storeOk ? stored.zzbItemId : pageId || stored.listItemId || stored.zzbItemId;
-      payload.zzbPackMismatch = packMismatch && !storeOk;
+      payload.zzbItemId = storeOk
+        ? pageId || stored.listItemId || stored.zzbItemId
+        : stored.listItemId || stored.zzbItemId || pageId;
+      payload.listItemId = stored.listItemId || undefined;
+      payload.packItemId = stored.packItemId || undefined;
+      payload.zzbPackMismatch = !storeOk && !!(hasMedia || hasSkus);
       payload.images = stored.images;
       payload.videos = stored.videos;
       payload.skus = mergeSkuRows(stored.skus, tableSkus);
+      if (tableSkus.length) payload.clickedSku = true;
       if (stored.storedTitle && storeOk) payload.zzbTitle = stored.storedTitle;
-    } else if (tableSkus.length && pageId) {
+    } else if (tableSkus.length) {
       payload.replaceSkus = true;
+      payload.clickedSku = true;
       payload.skus = tableSkus;
     }
-    if (payload.fromZzbStore || payload.replaceSkus || payload.itemId || payload.url) {
-      report(payload);
-    }
+    return payload;
   }
 
   function lsJson(key) {
     try {
-      const raw = localStorage.getItem(key);
+      const raw = localStorage.getItem(key) || sessionStorage.getItem(key);
       if (!raw) return null;
       return JSON.parse(raw);
     } catch (e) {
       return null;
     }
+  }
+
+  function readZzbFileList() {
+    const keys = ["fileList_tb", "fileList_tm", "fileList_ali", "fileList"];
+    const out = [];
+    const seen = {};
+    keys.forEach((key) => {
+      const list = lsJson(key);
+      if (!Array.isArray(list)) return;
+      list.forEach((item) => {
+        if (!item) return;
+        const mark = String(item.url || item.src || "") + "\0" + String(item.cateType || "") + "\0" + String(item.name || "");
+        if (seen[mark]) return;
+        seen[mark] = 1;
+        out.push(item);
+      });
+    });
+    return out.length ? out : null;
   }
 
   function zzbSpecValue(name) {
@@ -240,7 +273,7 @@
         skuRowFromParsed(skuItemName(item), parsed, item && item.url, price, price, skuItemStock(item))
       );
     };
-    const list = lsJson("fileList_tb");
+    const list = readZzbFileList();
     const pack = lsJson("sku复制传值数据");
     const hasStore = Array.isArray(list) || !!(pack && pack.myItemInfo);
     if (Array.isArray(list)) {
@@ -379,13 +412,42 @@
     return t.replace(/\s+/g, " ").trim();
   }
 
-  function clickLabel(el) {
-    let n = el;
-    for (let i = 0; i < 5 && n; i++, n = n.parentElement) {
-      if (!n || n === document.body || n === document.documentElement) break;
+  function nodeLabel(n) {
+    if (!n || n.nodeType !== 1) return "";
+    const attr = String((n.getAttribute && (n.getAttribute("title") || n.getAttribute("aria-label") || n.getAttribute("alt"))) || "")
+      .replace(/\s+/g, "")
+      .trim();
+    const t = String(n.innerText || n.textContent || "")
+      .replace(/\s+/g, "")
+      .trim();
+    return t && t.length <= 30 ? t : attr.slice(0, 30);
+  }
+
+  function toolClickKind(ev) {
+    const els = [];
+    const path = ev.composedPath ? ev.composedPath() : [];
+    for (let i = 0; i < path.length && i < 20; i++) {
+      if (path[i] && path[i].nodeType === 1) els.push(path[i]);
+    }
+    if (!els.length) {
+      let n = ev.target;
+      for (let i = 0; i < 10 && n; i++, n = n.parentElement || n.host) {
+        if (n.nodeType === 1) els.push(n);
+      }
+    }
+    for (let i = 0; i < els.length; i++) {
+      const n = els[i];
       if (n.id === "pc-collect-panel" || (n.closest && n.closest("#pc-collect-panel"))) return "";
-      const t = String(n.innerText || n.textContent || "").replace(/\s+/g, "").trim();
-      if (t && t.length > 0 && t.length <= 24) return t;
+      if (isZzbTitleBar(n)) {
+        const btn = nodeLabel(ev.target);
+        if (!btn || /标题|链\+标/.test(btn)) return "title";
+      }
+    }
+    for (let i = 0; i < Math.min(els.length, 10); i++) {
+      const label = nodeLabel(els[i]);
+      if (!label) continue;
+      if (/^SKU工具$/.test(label)) return "sku";
+      if (/手机端主图视频SKU|主图视频SKU|手机端主图视频/.test(label)) return "media";
     }
     return "";
   }
@@ -596,8 +658,9 @@
   }
 
   function isProductImage(u) {
-    if (SKIP.test(u) || !/\.(jpe?g|png)(\?|$)/i.test(u)) return false;
-    return /alicdn\.com|aliimg|imgextra|tbcdn/i.test(u);
+    if (SKIP.test(u)) return false;
+    if (!/alicdn\.com|aliimg|imgextra|tbcdn/i.test(u)) return false;
+    return /\.(jpe?g|png|webp)(\?|$)/i.test(u) || /imgextra|\/bao\/uploaded\//i.test(u);
   }
 
   function firstAlicdn(html) {
@@ -934,9 +997,18 @@
   }
 
   function report(payload) {
-    try {
-      chrome.runtime.sendMessage({ type: "pc-collect-harvest", payload });
-    } catch (e) {}
+    let tries = 0;
+    const send = () => {
+      tries += 1;
+      try {
+        chrome.runtime.sendMessage({ type: "pc-collect-harvest", payload }, () => {
+          if (chrome.runtime.lastError && tries < 8) setTimeout(send, 400);
+        });
+      } catch (e) {
+        if (tries < 8) setTimeout(send, 400);
+      }
+    };
+    send();
   }
 
   function mountPanel() {
