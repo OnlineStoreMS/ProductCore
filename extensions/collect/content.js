@@ -84,15 +84,19 @@
     if (pageId) payload.itemId = pageId;
     const stored = harvestZzbStore();
     const tableSkus = extractSkus();
-    // 至尊宝把标题和 SKU 写在站点共用的 localStorage 里。多个商品页会读到同一份，只接受和当前商品 ID 一致的那份。
+    // 至尊宝 localStorage 全站共用。优先认和当前商品 ID 一致的那份；
+    // pack 还是上一件、但 fileList 已更新时标 zzbPackMismatch，点过工具后仍可入库。
     const storeOk = !!stored.zzbItemId && (!pageId || stored.zzbItemId === pageId);
-    if (stored.fromZzbStore && storeOk) {
+    const packMismatch = !!(pageId && stored.packItemId && stored.packItemId !== pageId);
+    const hasMedia = (stored.images && stored.images.length) || (stored.videos && stored.videos.length);
+    if (stored.fromZzbStore && (storeOk || (packMismatch && hasMedia) || (!stored.zzbItemId && hasMedia))) {
       payload.fromZzbStore = true;
-      payload.zzbItemId = stored.zzbItemId;
+      payload.zzbItemId = storeOk ? stored.zzbItemId : pageId || stored.listItemId || stored.zzbItemId;
+      payload.zzbPackMismatch = packMismatch && !storeOk;
       payload.images = stored.images;
       payload.videos = stored.videos;
       payload.skus = mergeSkuRows(stored.skus, tableSkus);
-      if (stored.storedTitle) payload.zzbTitle = stored.storedTitle;
+      if (stored.storedTitle && storeOk) payload.zzbTitle = stored.storedTitle;
     } else if (tableSkus.length && pageId) {
       payload.replaceSkus = true;
       payload.skus = tableSkus;
@@ -151,6 +155,29 @@
     };
   }
 
+  function pickDigitsId(raw) {
+    const s = String(raw || "").trim();
+    return /^\d{5,}$/.test(s) ? s : "";
+  }
+
+  function firstFileListItemId(list) {
+    if (!Array.isArray(list)) return "";
+    for (let i = 0; i < list.length; i++) {
+      const item = list[i];
+      if (!item) continue;
+      const id =
+        pickDigitsId(item.itemId) ||
+        pickDigitsId(item.numIid) ||
+        pickDigitsId(item.num_iid) ||
+        pickDigitsId(item.goodsId) ||
+        pickDigitsId(item.auctionId);
+      if (id) return id;
+      const fromUrl = String(item.url || item.src || "").match(/[?&]id=(\d{5,})/);
+      if (fromUrl) return fromUrl[1];
+    }
+    return "";
+  }
+
   function zzbStoredTitle() {
     const pack = lsJson("sku复制传值数据");
     const t = pack && pack.myItemInfo && pack.myItemInfo.item && pack.myItemInfo.item.title;
@@ -204,9 +231,14 @@
       });
     }
     const packItem = pack && pack.myItemInfo && pack.myItemInfo.item;
-    const zzbItemId = String(
+    const packItemId = String(
       (pack && pack.itemId) || (packItem && (packItem.itemId || packItem.numIid)) || ""
     );
+    const listItemId = firstFileListItemId(list);
+    const pageId = pageItemId();
+    let zzbItemId = packItemId;
+    if (pageId && listItemId === pageId) zzbItemId = listItemId;
+    else if (pageId && packItemId && packItemId !== pageId && listItemId) zzbItemId = listItemId;
     if (pack && pack.myItemInfo && !Array.isArray(list)) {
       const info = pack.myItemInfo;
       if (info.pcVideo) addVid(info.pcVideo);
@@ -235,7 +267,16 @@
         if (pic) prev.pic = pic;
       });
     }
-    return { images, videos, skus, storedTitle: zzbStoredTitle(), fromZzbStore: hasStore, zzbItemId };
+    return {
+      images,
+      videos,
+      skus,
+      storedTitle: zzbStoredTitle(),
+      fromZzbStore: hasStore,
+      zzbItemId,
+      packItemId,
+      listItemId,
+    };
   }
 
   function mergeSkuRows(base, extra) {

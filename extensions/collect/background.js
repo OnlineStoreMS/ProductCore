@@ -1,15 +1,60 @@
 const tabState = new Map();
+const STATE_KEY = "pcCollectTabState";
+const persistStore =
+  chrome.storage && chrome.storage.session ? chrome.storage.session : chrome.storage.local;
+
+function persistTab(tabId) {
+  const state = tabState.get(tabId);
+  persistStore.get(STATE_KEY, (all) => {
+    const map = (all && all[STATE_KEY]) || {};
+    if (state) map[String(tabId)] = state;
+    else delete map[String(tabId)];
+    persistStore.set({ [STATE_KEY]: map });
+  });
+}
+
+function hydrateTab(tabId, done) {
+  if (tabState.has(tabId)) {
+    done(tabState.get(tabId));
+    return;
+  }
+  persistStore.get(STATE_KEY, (all) => {
+    const saved = all && all[STATE_KEY] && all[STATE_KEY][String(tabId)];
+    const state = saved && typeof saved === "object" ? saved : emptyState();
+    tabState.set(tabId, state);
+    done(state);
+  });
+}
+
+function hydrateAll(done) {
+  persistStore.get(STATE_KEY, (all) => {
+    const map = (all && all[STATE_KEY]) || {};
+    Object.keys(map).forEach((id) => {
+      const tabId = Number(id);
+      if (!tabState.has(tabId) && map[id]) tabState.set(tabId, map[id]);
+    });
+    if (done) done();
+  });
+}
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  tabState.delete(tabId);
+  persistTab(tabId);
+});
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const tabId = sender.tab && sender.tab.id;
   if (msg && msg.type === "pc-collect-harvest" && tabId) {
-    mergeHarvest(tabId, msg.payload || {});
-    pushToTab(tabId);
-    sendResponse({ ok: true });
+    hydrateTab(tabId, () => {
+      mergeHarvest(tabId, msg.payload || {});
+      persistTab(tabId);
+      pushToTab(tabId);
+      sendResponse({ ok: true });
+    });
     return true;
   }
   if (msg && msg.type === "pc-collect-get") {
-    sendResponse(tabState.get(tabId) || emptyState());
+    hydrateTab(tabId, (state) => sendResponse(state || emptyState()));
     return true;
   }
   if (msg && msg.type === "pc-collect-upload") {
@@ -56,7 +101,8 @@ function isJunkTitle(next) {
 function mergeHarvest(tabId, incoming) {
   let cur = tabState.get(tabId) || emptyState();
   if (incoming.resetSession) {
-    cur = emptyState();
+    const sameItem = incoming.itemId && cur.itemId && incoming.itemId === cur.itemId;
+    if (!sameItem) cur = emptyState();
   }
   if (incoming.itemId && cur.itemId && incoming.itemId !== cur.itemId) {
     cur = emptyState();
@@ -66,7 +112,7 @@ function mergeHarvest(tabId, incoming) {
   if (incoming.platform && incoming.url && /item\.taobao|detail\.tmall/i.test(incoming.url)) {
     cur.platform = incoming.platform;
   }
-  const trusted = storeMatchesPage(cur, incoming);
+  const trusted = storeMatchesPage(cur, incoming) || acceptClickedStore(cur, incoming);
   if (incoming.clickedTitle) cur.clickedTitle = true;
   const applyTitle = (raw) => {
     const next = String(raw || "")
@@ -113,6 +159,18 @@ function storeMatchesPage(cur, incoming) {
   const zzb = String(incoming.zzbItemId || "");
   const page = String(incoming.itemId || (cur && cur.itemId) || "");
   return !!(zzb && page && zzb === page);
+}
+
+/** 点过主图/SKU 后，至尊宝 pack 可能还是上一件，但 fileList 已经是当前页。 */
+function acceptClickedStore(cur, incoming) {
+  if (!incoming.fromZzbStore) return false;
+  const hasMedia = (incoming.images && incoming.images.length) || (incoming.videos && incoming.videos.length);
+  const hasSkus = incoming.skus && incoming.skus.length;
+  if (cur.clickedMedia && hasMedia && incoming.zzbPackMismatch) return true;
+  if (cur.clickedSku && hasSkus && incoming.zzbPackMismatch) return true;
+  if (cur.clickedMedia && hasMedia && !incoming.zzbItemId) return true;
+  if (cur.clickedSku && hasSkus && !incoming.zzbItemId) return true;
+  return false;
 }
 
 function skuStateKey(row) {
@@ -219,7 +277,14 @@ function pushToTab(tabId) {
 setInterval(pollSkuFrames, 1500);
 
 function pollSkuFrames() {
-  tabState.forEach((state, tabId) => {
+  hydrateAll(() => {
+    tabState.forEach((state, tabId) => {
+      pollOneSkuTab(state, tabId);
+    });
+  });
+}
+
+function pollOneSkuTab(state, tabId) {
     if (!state.clickedSku) return;
     chrome.scripting.executeScript(
       {
@@ -235,10 +300,10 @@ function pollSkuFrames() {
         });
         if (!rows.length) return;
         mergeHarvest(tabId, { skus: rows });
+        persistTab(tabId);
         pushToTab(tabId);
       }
     );
-  });
 }
 
 function scrapeSkuMainWorld() {
