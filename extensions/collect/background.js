@@ -3,13 +3,15 @@ const STATE_KEY = "pcCollectTabState";
 const persistStore =
   chrome.storage && chrome.storage.session ? chrome.storage.session : chrome.storage.local;
 
-function persistTab(tabId) {
+function persistTab(tabId, done) {
   const state = tabState.get(tabId);
   persistStore.get(STATE_KEY, (all) => {
     const map = (all && all[STATE_KEY]) || {};
     if (state) map[String(tabId)] = state;
     else delete map[String(tabId)];
-    persistStore.set({ [STATE_KEY]: map });
+    persistStore.set({ [STATE_KEY]: map }, () => {
+      if (typeof done === "function") done();
+    });
   });
 }
 
@@ -57,6 +59,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg && msg.type === "pc-collect-get") {
     hydrateTab(tabId, (state) => sendResponse(state || emptyState()));
+    return true;
+  }
+  if (msg && msg.type === "pc-collect-reset") {
+    hydrateTab(tabId, (state) => {
+      const next = emptyState();
+      next.itemId = (state && state.itemId) || "";
+      next.url = (state && state.url) || "";
+      next.platform = (state && state.platform) || "taobao";
+      tabState.set(tabId, next);
+      persistTab(tabId, () => {
+        pushToTab(tabId);
+        sendResponse({ ok: true });
+      });
+    });
     return true;
   }
   if (msg && msg.type === "pc-collect-upload") {
@@ -214,7 +230,7 @@ function mergeHarvest(tabId, incoming) {
     if (!cur.title || isJunkTitle(cur.title) || incoming.clickedTitle) cur.title = next;
   };
   if (incoming.title && incoming.clickedTitle && (incoming.titleFromPage || trusted)) applyTitle(incoming.title);
-  if (incoming.zzbTitle && trusted) {
+  if (incoming.zzbTitle && trusted && (incoming.clickedTitle || cur.clickedTitle)) {
     const next = String(incoming.zzbTitle)
       .replace(/[\uE000-\uF8FF]/g, "")
       .replace(/\s+/g, " ")
@@ -335,7 +351,8 @@ function overlaySkuState(baseList, extraList) {
       if (!row) return null;
       const key = skuStateKey(row);
       if (!key) return null;
-      const prev = extra.get(key) || extraVal.get(skuValueKey(row));
+      const prevExact = extra.get(key);
+      const prev = prevExact || extraVal.get(skuValueKey(row));
       const out = Object.assign({}, row, {
         specValue: row.specValue || key,
         name: row.name || row.specValue || key,
@@ -348,7 +365,7 @@ function overlaySkuState(baseList, extraList) {
       }
       if (!(out.originalPrice > 0) && prev && prev.originalPrice > 0) out.originalPrice = prev.originalPrice;
       if (!(out.stock > 0) && prev && prev.stock > 0) out.stock = prev.stock;
-      if (!out.pic && prev && prev.pic) out.pic = prev.pic;
+      if (!out.pic && prevExact && prevExact.pic) out.pic = prevExact.pic;
       return out;
     })
     .filter(Boolean);
@@ -609,14 +626,14 @@ function scrapeZzbStoreMainWorld() {
     }
     return String((row && row.specValue) || "").trim();
   };
-  const addSku = (item) => {
+  const addSku = (item, usePic) => {
     if (!item) return;
     const parsed = parseSkuLabel(item.name || item.skuName || item["规格名称"] || item["SKU名称"] || "");
     if (!parsed || !parsed.specValue) return;
     const key = skuKey(parsed);
     if (!key || seenSku[key]) return;
     seenSku[key] = 1;
-    const url = clean(item.url);
+    const url = usePic ? clean(item.url) : "";
     const firstPrice = (...vals) => {
       for (let i = 0; i < vals.length; i++) {
         const n = Number(vals[i]);
@@ -653,10 +670,10 @@ function scrapeZzbStoreMainWorld() {
     const ft = Number(item.fileType);
     if (ft === 2 || cate === 4 || isVid(url)) {
       if (url && isVid(url)) videos.push({ src: url });
-      if (cate === 2) addSku(item);
+      if (cate === 2) addSku(item, true);
       return;
     }
-    if (cate === 2) addSku(item);
+    if (cate === 2) addSku(item, true);
     if (!isImg(url) || seenImg[url]) return;
     seenImg[url] = 1;
     let kind = "main";
@@ -730,7 +747,8 @@ function pollOneSkuTab(state, tabId) {
             const key = skuStateKey(row);
             const vkey = skuValueKey(row);
             if (!key) return;
-            const prev = byKey.get(key) || (vkey && byVal.get(vkey));
+            const exact = byKey.get(key);
+            const prev = exact || (vkey && byVal.get(vkey));
             if (!prev) {
               byKey.set(key, row);
               if (vkey) byVal.set(vkey, row);
@@ -742,7 +760,7 @@ function pollOneSkuTab(state, tabId) {
             }
             if (!(prev.originalPrice > 0) && row.originalPrice > 0) prev.originalPrice = row.originalPrice;
             if (row.stock > 0) prev.stock = row.stock;
-            if (row.pic && !prev.pic) prev.pic = row.pic;
+            if (row.pic && !prev.pic && exact) prev.pic = row.pic;
             if (row.specs && Object.keys(row.specs).length > Object.keys(prev.specs || {}).length) {
               prev.specs = row.specs;
               prev.dimensions = row.dimensions;

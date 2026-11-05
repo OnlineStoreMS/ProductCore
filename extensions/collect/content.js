@@ -285,12 +285,19 @@
       if (item["库存"] != null && item["库存"] !== "") return parseStock(item["库存"]);
       return 0;
     };
-    const addSku = (item) => {
+    const addSku = (item, usePic) => {
       const parsed = parseSkuName(skuItemName(item));
       if (!parsed.specValue) return;
       const price = skuItemPrice(item);
       skus.push(
-        skuRowFromParsed(skuItemName(item), parsed, item && item.url, price, price, skuItemStock(item))
+        skuRowFromParsed(
+          skuItemName(item),
+          parsed,
+          usePic ? item && item.url : "",
+          price,
+          price,
+          skuItemStock(item)
+        )
       );
     };
     const list = readZzbFileList();
@@ -309,7 +316,7 @@
         if (cate === 3) kind = "detail";
         else if (cate === 2) kind = "sku";
         addImg(item.url, kind);
-        if (cate === 2) addSku(item);
+        if (cate === 2) addSku(item, true);
       });
     }
     const packItem = pack && pack.myItemInfo && pack.myItemInfo.item;
@@ -352,9 +359,8 @@
         const prev = skus.find((s) => skuRowKey(s) === key);
         const price = skuItemPrice(item);
         const stock = skuItemStock(item);
-        const pic = clean(item && item.url);
         if (!prev) {
-          addSku(item);
+          addSku(item, false);
           return;
         }
         if (price > 0) {
@@ -362,7 +368,6 @@
           prev.originalPrice = price;
         }
         if (stock > 0) prev.stock = stock;
-        if (pic) prev.pic = pic;
       });
     });
     return {
@@ -1081,7 +1086,12 @@
       "</div>";
     document.documentElement.appendChild(box);
     box.querySelector("[data-act=hide]").onclick = () => box.remove();
-    box.querySelector("#pc-reset").onclick = () => location.reload();
+    box.querySelector("#pc-reset").onclick = () => {
+      chrome.runtime.sendMessage({ type: "pc-collect-reset" }, () => {
+        void chrome.runtime.lastError;
+        location.reload();
+      });
+    };
     box.querySelector("#pc-upload").onclick = () => doUpload();
     chrome.runtime.onMessage.addListener((msg) => {
       if (msg && msg.type === "pc-collect-state") render(msg.state);
@@ -1443,7 +1453,7 @@
         dimensions.map((d) => specs[d]).filter(Boolean).join("/") ||
         parsed.specValue;
       if (!specValue || !dimensions.length) return;
-      const pic = row.pic || skuPics[i] || "";
+      const pic = row.pic || "";
       const item = {
         specs,
         dimensions,
