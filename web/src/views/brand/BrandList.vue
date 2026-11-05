@@ -103,10 +103,9 @@ function clearLogo() {
       </div>
 
       <el-table :data="tableData" stripe border>
-        <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column label="品牌Logo" width="88" align="center">
+        <el-table-column label="品牌Logo" width="128" align="center">
           <template #default="{ row }">
-            <el-image v-if="row.logo" :src="row.logo" class="brand-logo" fit="cover" :preview-src-list="[row.logo]" preview-teleported />
+            <el-image v-if="row.logo" :src="row.logo" class="brand-logo" fit="contain" :preview-src-list="[row.logo]" preview-teleported />
             <span v-else class="logo-placeholder">{{ row.firstLetter || row.name?.slice(0, 1) || '-' }}</span>
           </template>
         </el-table-column>
@@ -145,7 +144,7 @@ function clearLogo() {
         </el-form-item>
         <el-form-item label="品牌Logo">
           <div class="logo-field">
-            <el-image v-if="editing.logo" :src="editing.logo" class="logo-preview" fit="cover" />
+            <el-image v-if="editing.logo" :src="editing.logo" class="logo-preview" fit="contain" />
             <el-input v-model="editing.logo" placeholder="Logo URL 或上传图片" />
             <el-upload :show-file-list="false" accept="image/*" :before-upload="onLogoUpload">
               <el-button :icon="Upload">上传</el-button>
@@ -178,20 +177,27 @@ function clearLogo() {
 
 .brand-logo,
 .logo-preview {
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
+  width: 96px;
+  height: 48px;
+  border-radius: 4px;
   flex-shrink: 0;
+  background: #f7f7f7;
+  border: 1px solid #f0f0f0;
+}
+
+.brand-logo :deep(.el-image__inner),
+.logo-preview :deep(.el-image__inner) {
+  object-fit: contain;
 }
 
 .logo-placeholder {
   display: inline-flex;
-  width: 40px;
-  height: 40px;
+  width: 96px;
+  height: 48px;
   align-items: center;
   justify-content: center;
   background: #f0f2f5;
-  border-radius: 6px;
+  border-radius: 4px;
   color: #909399;
   font-size: 16px;
   font-weight: 600;

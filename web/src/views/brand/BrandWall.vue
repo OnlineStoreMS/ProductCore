@@ -123,7 +123,7 @@ function openBrand(brand: Brand) {
 
 .wall-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
   gap: 16px;
   padding: 4px 0 8px;
 }
@@ -150,9 +150,9 @@ function openBrand(brand: Brand) {
 }
 
 .logo-wrap {
-  width: 72px;
+  width: 140px;
   height: 72px;
-  border-radius: 12px;
+  border-radius: 6px;
   background: #f7f7f7;
   border: 1px solid #f0f0f0;
   display: flex;
