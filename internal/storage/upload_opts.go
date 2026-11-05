@@ -105,6 +105,8 @@ func extFromContentType(ct string) string {
 		return ".webp"
 	case "image/gif":
 		return ".gif"
+	case "image/svg+xml", "image/svg":
+		return ".svg"
 	case "video/mp4":
 		return ".mp4"
 	case "video/webm":
@@ -206,6 +208,8 @@ func detectContentType(filename, headerCT string) string {
 		return "image/webp"
 	case ".gif":
 		return "image/gif"
+	case ".svg":
+		return "image/svg+xml"
 	case ".mp4":
 		return "video/mp4"
 	case ".webm":

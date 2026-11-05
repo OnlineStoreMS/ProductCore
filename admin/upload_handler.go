@@ -347,6 +347,8 @@ func fileContentType(file *multipart.FileHeader) string {
 		return "image/png"
 	case ".webp":
 		return "image/webp"
+	case ".svg":
+		return "image/svg+xml"
 	case ".mp4":
 		return "video/mp4"
 	case ".webm":
@@ -361,16 +363,14 @@ func fileContentType(file *multipart.FileHeader) string {
 }
 
 func isAllowedImage(file *multipart.FileHeader) bool {
-	ct := fileContentType(file)
-	if strings.HasPrefix(ct, "image/") {
-		switch ct {
-		case "image/jpeg", "image/png", "image/webp", "image/jpg", "image/jfif", "image/pjpeg":
-			return true
-		}
-	}
 	ext := strings.ToLower(filepath.Ext(file.Filename))
 	switch ext {
-	case ".jpg", ".jpeg", ".jfif", ".png", ".webp":
+	case ".jpg", ".jpeg", ".jfif", ".png", ".webp", ".svg":
+		return true
+	}
+	ct := strings.ToLower(strings.Split(fileContentType(file), ";")[0])
+	switch ct {
+	case "image/jpeg", "image/png", "image/webp", "image/jpg", "image/jfif", "image/pjpeg", "image/svg+xml", "image/svg":
 		return true
 	}
 	return false
@@ -394,7 +394,7 @@ func validateImageFile(file *multipart.FileHeader) string {
 		return "file too large (max 10MB)"
 	}
 	if !isAllowedImage(file) {
-		return "unsupported image type (jpg/jpeg/jfif/png/webp)"
+		return "unsupported image type (jpg/jpeg/jfif/png/webp/svg)"
 	}
 	return ""
 }

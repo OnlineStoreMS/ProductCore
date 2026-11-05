@@ -105,7 +105,7 @@ function clearLogo() {
       <el-table :data="tableData" stripe border>
         <el-table-column label="品牌Logo" width="128" align="center">
           <template #default="{ row }">
-            <el-image v-if="row.logo" :src="row.logo" class="brand-logo" fit="contain" :preview-src-list="[row.logo]" preview-teleported />
+            <img v-if="row.logo" :src="row.logo" :alt="row.name" class="brand-logo" />
             <span v-else class="logo-placeholder">{{ row.firstLetter || row.name?.slice(0, 1) || '-' }}</span>
           </template>
         </el-table-column>
@@ -144,9 +144,9 @@ function clearLogo() {
         </el-form-item>
         <el-form-item label="品牌Logo">
           <div class="logo-field">
-            <el-image v-if="editing.logo" :src="editing.logo" class="logo-preview" fit="contain" />
+            <img v-if="editing.logo" :src="editing.logo" alt="品牌Logo" class="logo-preview" />
             <el-input v-model="editing.logo" placeholder="Logo URL 或上传图片" />
-            <el-upload :show-file-list="false" accept="image/*" :before-upload="onLogoUpload">
+            <el-upload :show-file-list="false" accept="image/*,.svg,image/svg+xml" :before-upload="onLogoUpload">
               <el-button :icon="Upload">上传</el-button>
             </el-upload>
             <el-button v-if="editing.logo" link type="danger" @click="clearLogo">清除</el-button>
@@ -183,10 +183,6 @@ function clearLogo() {
   flex-shrink: 0;
   background: #f7f7f7;
   border: 1px solid #f0f0f0;
-}
-
-.brand-logo :deep(.el-image__inner),
-.logo-preview :deep(.el-image__inner) {
   object-fit: contain;
 }
 

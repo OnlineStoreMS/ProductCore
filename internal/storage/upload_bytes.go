@@ -26,7 +26,7 @@ func UploadBytes(store Storage, data []byte, filename string, opts UploadOptions
 	}
 	filename = safeFilename(filename)
 	if !isAllowedImageName(filename, "") {
-		return "", fmt.Errorf("unsupported image type (jpg/jpeg/jfif/png/webp)")
+		return "", fmt.Errorf("unsupported image type (jpg/jpeg/jfif/png/webp/svg)")
 	}
 	tmp, err := os.CreateTemp("", "upload-bytes-*")
 	if err != nil {
@@ -64,6 +64,8 @@ func UploadBase64(store Storage, raw string, opts UploadOptions) (string, error)
 			filename = "image.webp"
 		case strings.Contains(meta, "image/jpeg"), strings.Contains(meta, "image/jpg"), strings.Contains(meta, "image/jfif"):
 			filename = "image.jpg"
+		case strings.Contains(meta, "image/svg"):
+			filename = "image.svg"
 		}
 	}
 	data, err := base64.StdEncoding.DecodeString(payload)

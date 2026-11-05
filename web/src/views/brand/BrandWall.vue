@@ -70,7 +70,7 @@ function openBrand(brand: Brand) {
           @click="openBrand(brand)"
         >
           <div class="logo-wrap">
-            <el-image v-if="brand.logo" :src="brand.logo" fit="contain" class="logo-img" />
+            <img v-if="brand.logo" :src="brand.logo" :alt="brand.name" class="logo-img" />
             <span v-else class="logo-fallback">{{ brand.firstLetter || brand.name.slice(0, 1) || '?' }}</span>
           </div>
           <div class="brand-name" :title="brand.name">{{ brand.name }}</div>
@@ -151,24 +151,19 @@ function openBrand(brand: Brand) {
 
 .logo-wrap {
   width: 140px;
-  height: 72px;
-  border-radius: 6px;
-  background: #f7f7f7;
-  border: 1px solid #f0f0f0;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
 }
 
 .logo-img {
-  width: 100%;
-  height: 100%;
-}
-
-.logo-img :deep(.el-image__inner) {
+  max-width: 140px;
+  max-height: 56px;
+  width: auto;
+  height: auto;
   object-fit: contain;
-  padding: 8px;
+  background: transparent;
 }
 
 .logo-fallback {
