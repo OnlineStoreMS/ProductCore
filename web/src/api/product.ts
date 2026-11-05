@@ -222,6 +222,10 @@ export async function updateBrand(id: number, data: Partial<Brand>) {
   return unwrap<Brand>(res)
 }
 
+export async function reorderBrands(ids: number[]) {
+  await client.put('/brands/reorder', { ids })
+}
+
 export async function deleteBrand(id: number) {
   await client.delete(`/brands/${id}`)
 }

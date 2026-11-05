@@ -31,6 +31,22 @@ func (r *BrandRepo) Create(b *model.Brand) error { return r.db.Create(b).Error }
 
 func (r *BrandRepo) Save(b *model.Brand) error { return r.db.Save(b).Error }
 
+func (r *BrandRepo) Reorder(tenantID uint64, ids []uint64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		n := len(ids)
+		for i, id := range ids {
+			res := tx.Scopes(scopeTenant(tenantID)).Model(&model.Brand{}).Where("id = ?", id).Update("sort", n-i)
+			if res.Error != nil {
+				return res.Error
+			}
+		}
+		return nil
+	})
+}
+
 func (r *BrandRepo) Delete(tenantID, id uint64) error {
 	res := r.db.Scopes(scopeTenant(tenantID)).Delete(&model.Brand{}, id)
 	if res.Error != nil {

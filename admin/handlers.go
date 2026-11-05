@@ -627,6 +627,29 @@ func (h *BrandHandler) Create(c *gin.Context) {
 	response.Created(c, item)
 }
 
+// Reorder godoc
+//
+//	@Summary		品牌墙排序
+//	@Tags			admin-品牌
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			body	body		dto.BrandReorderDTO	true	"品牌 ID 顺序"
+//	@Success		200		{object}	response.EmptyResp
+//	@Router			/admin/brands/reorder [put]
+func (h *BrandHandler) Reorder(c *gin.Context) {
+	var in dto.BrandReorderDTO
+	if err := c.ShouldBindJSON(&in); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.bs(c).Reorder(in.IDs); err != nil {
+		httputil.HandleServiceError(c, err)
+		return
+	}
+	response.OK(c, nil)
+}
+
 // Update godoc
 //
 //	@Summary		更新品牌

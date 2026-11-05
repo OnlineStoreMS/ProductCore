@@ -141,6 +141,10 @@ type BrandDTO struct {
 	ProductCount int64  `json:"productCount,omitempty"`
 }
 
+type BrandReorderDTO struct {
+	IDs []uint64 `json:"ids" binding:"required,min=1"`
+}
+
 type CategoryDTO struct {
 	ID           uint64        `json:"id,omitempty"`
 	ParentID     uint64        `json:"parentId"`

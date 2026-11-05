@@ -49,6 +49,7 @@ func RegisterRoutes(
 
 	g.GET("/brands", brandH.List)
 	g.POST("/brands", brandH.Create)
+	g.PUT("/brands/reorder", brandH.Reorder)
 	g.PUT("/brands/:id", brandH.Update)
 	g.DELETE("/brands/:id", brandH.Delete)
 

@@ -71,6 +71,10 @@ func (s *BrandService) Update(id uint64, in *dto.BrandDTO) (*dto.BrandDTO, error
 	return &item, nil
 }
 
+func (s *BrandService) Reorder(ids []uint64) error {
+	return s.repo.Reorder(s.tenantID, ids)
+}
+
 func (s *BrandService) Delete(id uint64) error {
 	if err := s.repo.Delete(s.tenantID, id); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
