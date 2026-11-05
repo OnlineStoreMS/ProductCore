@@ -71,8 +71,67 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((err) => sendResponse({ ok: false, error: String(err && err.message ? err.message : err) }));
     return true;
   }
+  if (msg && msg.type === "pc-collect-hook-clicks" && sender.tab && sender.tab.id) {
+    injectClickHook(sender.tab.id);
+  }
   return false;
 });
+
+chrome.tabs.onUpdated.addListener((tabId, info) => {
+  if (info.status === "complete") injectClickHook(tabId);
+});
+
+function injectClickHook(tabId) {
+  chrome.scripting.executeScript(
+    {
+      target: { tabId, allFrames: true },
+      world: "MAIN",
+      func: hookZzbToolClicks,
+    },
+    () => {
+      void chrome.runtime.lastError;
+    }
+  );
+}
+
+function hookZzbToolClicks() {
+  if (window.__pcCollectClickHook) return "exists";
+  window.__pcCollectClickHook = true;
+  const labelOf = (n) => {
+    if (!n || n.nodeType !== 1) return "";
+    const t = String(n.innerText || n.textContent || "").replace(/\s+/g, "").trim();
+    return t && t.length <= 30 ? t : "";
+  };
+  const kindOf = (ev) => {
+    const els = [];
+    const path = ev.composedPath ? ev.composedPath() : [];
+    for (let i = 0; i < path.length && i < 20; i++) {
+      if (path[i] && path[i].nodeType === 1) els.push(path[i]);
+    }
+    if (!els.length) {
+      let n = ev.target;
+      for (let i = 0; i < 10 && n; i++, n = n.parentElement) {
+        if (n.nodeType === 1) els.push(n);
+      }
+    }
+    for (let i = 0; i < Math.min(els.length, 10); i++) {
+      const label = labelOf(els[i]);
+      if (!label) continue;
+      if (/^SKU工具$/.test(label)) return "sku";
+      if (/手机端主图视频SKU|主图视频SKU|手机端主图视频/.test(label)) return "media";
+    }
+    return "";
+  };
+  const fire = (ev) => {
+    const kind = kindOf(ev);
+    if (!kind) return;
+    window.__pcCollectLastKind = kind;
+    window.postMessage({ __pcCollect: 1, kind: kind }, "*");
+  };
+  document.addEventListener("click", fire, true);
+  document.addEventListener("pointerup", fire, true);
+  return "hooked";
+}
 
 function emptyState() {
   return {
@@ -108,7 +167,9 @@ function resolveHarvestTab(sender, payload, done) {
   if (/item\.taobao|detail\.tmall/i.test(url)) return done(tabId);
   const opener = tab.openerTabId;
   if (opener) return done(opener);
-  const itemId = String((payload && payload.itemId) || "");
+  const itemId = String(
+    (payload && (payload.itemId || payload.packItemId || payload.listItemId || payload.zzbItemId)) || ""
+  );
   hydrateAll(() => {
     let found = 0;
     tabState.forEach((state, id) => {
@@ -130,7 +191,6 @@ function mergeHarvest(tabId, incoming) {
   if (incoming.resetSession) {
     const sameItem = incoming.itemId && cur.itemId && incoming.itemId === cur.itemId;
     if (!sameItem) cur = emptyState();
-    else if (!(cur.images && cur.images.length)) cur.clickedMedia = false;
   }
   if (incoming.itemId && cur.itemId && incoming.itemId !== cur.itemId) {
     cur = emptyState();
@@ -140,8 +200,10 @@ function mergeHarvest(tabId, incoming) {
   if (incoming.platform && incoming.url && /item\.taobao|detail\.tmall/i.test(incoming.url)) {
     cur.platform = incoming.platform;
   }
-  const trusted = storeMatchesPage(cur, incoming) || acceptClickedStore(cur, incoming);
+  if (incoming.clickedMedia) cur.clickedMedia = true;
+  if (incoming.clickedSku) cur.clickedSku = true;
   if (incoming.clickedTitle) cur.clickedTitle = true;
+  const trusted = storeMatchesPage(cur, incoming) || acceptClickedStore(cur, incoming);
   const applyTitle = (raw) => {
     const next = String(raw || "")
       .replace(/[\uE000-\uF8FF]/g, "")
@@ -152,25 +214,21 @@ function mergeHarvest(tabId, incoming) {
     if (!cur.title || isJunkTitle(cur.title) || incoming.clickedTitle) cur.title = next;
   };
   if (incoming.title && incoming.clickedTitle && (incoming.titleFromPage || trusted)) applyTitle(incoming.title);
-  if (incoming.zzbTitle && cur.clickedTitle && trusted) {
+  if (incoming.zzbTitle && trusted) {
     const next = String(incoming.zzbTitle)
       .replace(/[\uE000-\uF8FF]/g, "")
       .replace(/\s+/g, " ")
       .trim();
-    if (!isJunkTitle(next) && next.length >= 8) cur.title = next;
+    if (!isJunkTitle(next) && next.length >= 8 && (!cur.title || incoming.clickedTitle)) cur.title = next;
   }
-  if (incoming.clickedMedia) cur.clickedMedia = true;
-  if (incoming.clickedSku) cur.clickedSku = true;
-  if (incoming.clickedTitle) cur.clickedTitle = true;
-  // 主图/视频跟「手机端主图视频SKU」走 fileList_tb，点完就收，不等 SKU 工具。
-  // 视频整表覆盖（包括空数组），避免没视频的商品沿用上一件 mp4。
-  if (trusted && cur.clickedMedia && incoming.fromZzbStore) {
+  // 主图/详情/视频：点过「手机端主图视频」后才收。ID 对得上再入库，避免点之前把上一件的 fileList 灌进来。
+  if (cur.clickedMedia && incoming.fromZzbStore && trusted) {
     if (Array.isArray(incoming.images) && incoming.images.length) cur.images = incoming.images;
     if (Array.isArray(incoming.videos)) cur.videos = incoming.videos;
   }
-  // SKU：当前页整表打底，再并入已抓到的 0 库存行和价格，避免无库存规格被冲掉。
-  if (cur.clickedSku && Array.isArray(incoming.skus) && incoming.skus.length) {
-    if (trusted && (incoming.fromZzbStore || incoming.replaceSkus)) {
+  // SKU：点过「SKU工具」后才收规格表 / 弹层 SKU。
+  if (cur.clickedSku && Array.isArray(incoming.skus) && incoming.skus.length && (trusted || incoming.replaceSkus)) {
+    if (incoming.fromZzbStore || incoming.replaceSkus) {
       cur.skus = mergeSkuState(incoming.skus, cur.skus);
     } else {
       cur.skus = mergeSkuState(cur.skus, incoming.skus);
@@ -181,27 +239,35 @@ function mergeHarvest(tabId, incoming) {
 
 function storeMatchesPage(cur, incoming) {
   if (incoming.replaceSkus && !incoming.fromZzbStore && !incoming.zzbItemId) return true;
-  if (!incoming.fromZzbStore && !incoming.zzbTitle && !incoming.zzbItemId && !incoming.listItemId) return false;
+  if (!incoming.fromZzbStore && !incoming.zzbTitle && !incoming.zzbItemId && !incoming.listItemId && !incoming.packItemId) {
+    return false;
+  }
   const page = String(incoming.itemId || (cur && cur.itemId) || "");
-  const zzb = String(incoming.zzbItemId || incoming.listItemId || "");
+  const zzb = String(incoming.zzbItemId || incoming.listItemId || incoming.packItemId || "");
   const listId = String(incoming.listItemId || "");
+  const packId = String(incoming.packItemId || "");
   if (listId && page && listId === page) return true;
+  if (packId && page && packId === page) return true;
   return !!(zzb && page && zzb === page);
 }
 
-/** 点过主图/SKU 后收下弹层数据：iframe 常没有商品 ID，pack 还可能是上一件。 */
+/** iframe 常没有商品 URL；点过工具，或 pack/fileList 已是当前商品时收下弹层数据。 */
 function acceptClickedStore(cur, incoming) {
   if (!incoming.fromZzbStore) return false;
   const hasMedia = (incoming.images && incoming.images.length) || (incoming.videos && incoming.videos.length);
   const hasSkus = incoming.skus && incoming.skus.length;
   const page = String((cur && cur.itemId) || incoming.itemId || "");
   const listId = String(incoming.listItemId || "");
+  const packId = String(incoming.packItemId || "");
   const zzb = String(incoming.zzbItemId || "");
+  const clickedMedia = !!(incoming.clickedMedia || cur.clickedMedia);
+  const clickedSku = !!(incoming.clickedSku || cur.clickedSku);
   if (listId && page && listId === page) return true;
-  if (cur.clickedMedia && hasMedia && (!(cur.images && cur.images.length) || incoming.zzbPackMismatch || !zzb || (zzb && page && zzb !== page))) {
+  if (packId && page && packId === page) return true;
+  if (clickedMedia && hasMedia && (!(cur.images && cur.images.length) || incoming.zzbPackMismatch || !zzb || (zzb && page && zzb !== page))) {
     return true;
   }
-  if (cur.clickedSku && hasSkus && (!(cur.skus && cur.skus.length) || incoming.zzbPackMismatch || !zzb || (zzb && page && zzb !== page))) {
+  if (clickedSku && hasSkus && (!(cur.skus && cur.skus.length) || incoming.zzbPackMismatch || !zzb || (zzb && page && zzb !== page))) {
     return true;
   }
   return false;
@@ -316,8 +382,36 @@ setInterval(pollCollectFrames, 1500);
 function pollCollectFrames() {
   hydrateAll(() => {
     tabState.forEach((state, tabId) => {
-      if (state.clickedMedia) pollOneMediaTab(state, tabId);
-      pollOneSkuTab(state, tabId);
+      injectClickHook(tabId);
+      chrome.scripting.executeScript(
+        {
+          target: { tabId, allFrames: true },
+          world: "MAIN",
+          func: () => {
+            const kind = window.__pcCollectLastKind || "";
+            if (kind) window.__pcCollectLastKind = "";
+            return kind;
+          },
+        },
+        (results) => {
+          if (!chrome.runtime.lastError && results) {
+            let kind = "";
+            results.forEach((item) => {
+              if (item && item.result) kind = item.result;
+            });
+            if (kind === "media") mergeHarvest(tabId, { clickedMedia: true, itemId: state.itemId });
+            if (kind === "sku") mergeHarvest(tabId, { clickedSku: true, itemId: state.itemId });
+            if (kind === "title") mergeHarvest(tabId, { clickedTitle: true, itemId: state.itemId });
+            if (kind) {
+              persistTab(tabId);
+              pushToTab(tabId);
+              state = tabState.get(tabId) || state;
+            }
+          }
+          if (state.itemId || state.clickedMedia) pollOneMediaTab(state, tabId);
+          pollOneSkuTab(state, tabId);
+        }
+      );
     });
   });
 }
@@ -333,25 +427,32 @@ function pollOneMediaTab(state, tabId) {
       if (chrome.runtime.lastError || !results) return;
       let images = [];
       let videos = [];
+      let skus = [];
       let listItemId = "";
       let packItemId = "";
+      let zzbTitle = "";
       results.forEach((item) => {
         const data = item && item.result;
         if (!data) return;
         if (Array.isArray(data.images) && data.images.length > images.length) images = data.images;
         if (Array.isArray(data.videos) && data.videos.length >= videos.length) videos = data.videos;
+        if (Array.isArray(data.skus) && data.skus.length > skus.length) skus = data.skus;
         if (data.listItemId) listItemId = data.listItemId;
         if (data.packItemId) packItemId = data.packItemId;
+        if (data.zzbTitle && String(data.zzbTitle).length > String(zzbTitle).length) zzbTitle = data.zzbTitle;
       });
-      if (!images.length && !videos.length) return;
+      if (!images.length && !videos.length && !skus.length && !zzbTitle) return;
       mergeHarvest(tabId, {
         fromZzbStore: true,
+        itemId: state.itemId,
         zzbPackMismatch: true,
         listItemId,
         packItemId,
         zzbItemId: listItemId || packItemId,
         images,
         videos,
+        skus,
+        zzbTitle,
       });
       persistTab(tabId);
       pushToTab(tabId);
@@ -402,24 +503,102 @@ function scrapeZzbStoreMainWorld() {
   const videos = [];
   const skus = [];
   const seenImg = {};
+  const seenSku = {};
+  const parseSkuLabel = (raw) => {
+    const s = String(raw || "")
+      .replace(/\uFEFF/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!s) return null;
+    const wrapped = s.match(/^([^:：()（）]{1,16})[（(](.+)[）)]$/);
+    if (wrapped && /[\u4e00-\u9fff]/.test(wrapped[1]) && !/[A-Za-z0-9]/.test(wrapped[1])) {
+      const name = wrapped[1].trim();
+      const value = wrapped[2].trim();
+      return {
+        name: s,
+        specName: name,
+        specValue: value,
+        specs: { [name]: value },
+        dimensions: [name],
+      };
+    }
+    return {
+      name: s,
+      specName: "商品规格",
+      specValue: s,
+      specs: { 商品规格: s },
+      dimensions: ["商品规格"],
+    };
+  };
+  const skuKey = (row) => {
+    const specs = row && row.specs;
+    if (specs && typeof specs === "object") {
+      const keys = Object.keys(specs).filter((k) => specs[k] != null && String(specs[k]).trim());
+      if (keys.length) {
+        return keys
+          .slice()
+          .sort()
+          .map((k) => k + "=" + String(specs[k]).replace(/\s+/g, " ").trim())
+          .join("\0");
+      }
+    }
+    return String((row && row.specValue) || "").trim();
+  };
+  const addSku = (item) => {
+    if (!item) return;
+    const parsed = parseSkuLabel(item.name || item.skuName || item["规格名称"] || item["SKU名称"] || "");
+    if (!parsed || !parsed.specValue) return;
+    const key = skuKey(parsed);
+    if (!key || seenSku[key]) return;
+    seenSku[key] = 1;
+    const url = clean(item.url);
+    const priceNum = Number(item.price);
+    const qty = Number(item.quantity != null ? item.quantity : item.stock);
+    skus.push({
+      name: parsed.name,
+      specName: parsed.specName,
+      specValue: parsed.specValue,
+      specs: parsed.specs,
+      dimensions: parsed.dimensions,
+      pic: url && isImg(url) ? url : "",
+      price: priceNum > 0 ? priceNum : 0,
+      originalPrice: priceNum > 0 ? priceNum : 0,
+      stock: qty > 0 ? qty : 0,
+    });
+  };
   list.forEach((item) => {
     const url = clean(item.url);
     const cate = Number(item.cateType);
     const ft = Number(item.fileType);
     if (ft === 2 || cate === 4 || isVid(url)) {
       if (url && isVid(url)) videos.push({ src: url });
+      if (cate === 2) addSku(item);
       return;
     }
+    if (cate === 2) addSku(item);
     if (!isImg(url) || seenImg[url]) return;
     seenImg[url] = 1;
     let kind = "main";
     if (cate === 3) kind = "detail";
     else if (cate === 2) kind = "sku";
     images.push({ src: url, kind: kind });
-    if (cate === 2 && item.name) {
-      skus.push({ name: item.name, specValue: item.name, pic: url, price: Number(item.price) || 0, stock: 0 });
-    }
   });
+  const pushSkuList = (arr) => {
+    if (!Array.isArray(arr)) return;
+    arr.forEach(addSku);
+  };
+  pushSkuList(pack && pack.skuInfos);
+  pushSkuList(pack && pack.skuList);
+  pushSkuList(pack && pack.skus);
+  if (pack && pack.myItemInfo) {
+    pushSkuList(pack.myItemInfo.skuInfos);
+    pushSkuList(pack.myItemInfo.skuList);
+    pushSkuList(pack.myItemInfo.skus);
+    if (pack.myItemInfo.item) {
+      pushSkuList(pack.myItemInfo.item.skuInfos);
+      pushSkuList(pack.myItemInfo.item.skus);
+    }
+  }
   const pickId = (raw) => (/^\d{5,}$/.test(String(raw || "").trim()) ? String(raw).trim() : "");
   let listItemId = "";
   list.forEach((item) => {
@@ -433,7 +612,23 @@ function scrapeZzbStoreMainWorld() {
   });
   const packItem = pack && pack.myItemInfo && pack.myItemInfo.item;
   const packItemId = String((pack && pack.itemId) || (packItem && (packItem.itemId || packItem.numIid)) || "");
-  return { images, videos, skus, listItemId, packItemId };
+  const zzbTitle = String((packItem && packItem.title) || (pack && pack.itemTitle) || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (pack && pack.myItemInfo) {
+    const info = pack.myItemInfo;
+    const addVidPack = (u) => {
+      const s = clean(u);
+      if (!s || !isVid(s)) return;
+      if (videos.some((v) => v.src === s)) return;
+      videos.push({ src: s });
+    };
+    addVidPack(info.pcVideo);
+    if (Array.isArray(info.item && info.item.videos)) {
+      info.item.videos.forEach((v) => addVidPack(v && v.url));
+    }
+  }
+  return { images, videos, skus, listItemId, packItemId, zzbTitle };
 }
 
 function pollOneSkuTab(state, tabId) {
@@ -451,7 +646,7 @@ function pollOneSkuTab(state, tabId) {
           if (Array.isArray(item.result)) rows.push.apply(rows, item.result);
         });
         if (!rows.length) return;
-        mergeHarvest(tabId, { skus: rows });
+        mergeHarvest(tabId, { skus: rows, replaceSkus: true, itemId: state.itemId });
         persistTab(tabId);
         pushToTab(tabId);
       }

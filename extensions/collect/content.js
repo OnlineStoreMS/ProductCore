@@ -3,43 +3,59 @@
   const isTop = window === window.top;
   const href = location.href || "";
 
-  document.addEventListener(
-    "click",
-    (ev) => {
-      if (ev.target && ev.target.closest && ev.target.closest("#pc-collect-panel")) return;
-      const kind = toolClickKind(ev);
-      if (kind === "title") {
-        const pageTitle = extractZzbTitle();
-        const stored = harvestZzbStore();
-        const pageId = pageItemId();
-        const sameItem = stored.zzbItemId && pageId && stored.zzbItemId === pageId;
-        const title = pageTitle || (sameItem ? stored.storedTitle : "");
-        report({
-          clickedTitle: true,
-          title: title || undefined,
-          titleFromPage: !!pageTitle,
-          zzbItemId: stored.zzbItemId || undefined,
-          itemId: pageId || undefined,
-          fromZzb: true,
-        });
-        return;
-      }
-      if (kind === "media") {
-        const payload = collectScanPayload();
-        payload.clickedMedia = true;
-        payload.itemId = payload.itemId || pageItemId() || undefined;
-        report(payload);
-        return;
-      }
-      if (kind === "sku") {
-        const payload = collectScanPayload();
-        payload.clickedSku = true;
-        payload.itemId = payload.itemId || pageItemId() || undefined;
-        report(payload);
-      }
-    },
-    true
-  );
+  let lastToolKind = "";
+  let lastToolAt = 0;
+  function onToolKind(kind) {
+    if (!kind) return;
+    const now = Date.now();
+    if (kind === lastToolKind && now - lastToolAt < 800) return;
+    lastToolKind = kind;
+    lastToolAt = now;
+    if (kind === "title") {
+      const pageTitle = extractZzbTitle();
+      const stored = harvestZzbStore();
+      const pageId = pageItemId();
+      const sameItem = stored.zzbItemId && pageId && stored.zzbItemId === pageId;
+      const title = pageTitle || (sameItem ? stored.storedTitle : "");
+      report({
+        clickedTitle: true,
+        title: title || undefined,
+        titleFromPage: !!pageTitle,
+        zzbItemId: stored.zzbItemId || undefined,
+        itemId: pageId || stored.packItemId || undefined,
+        fromZzb: true,
+      });
+      return;
+    }
+    if (kind === "media") {
+      const payload = collectScanPayload();
+      payload.clickedMedia = true;
+      payload.itemId = payload.itemId || pageItemId() || payload.packItemId || undefined;
+      report(payload);
+      return;
+    }
+    if (kind === "sku") {
+      const payload = collectScanPayload();
+      payload.clickedSku = true;
+      payload.itemId = payload.itemId || pageItemId() || payload.packItemId || undefined;
+      report(payload);
+    }
+  }
+  const onToolPointer = (ev) => {
+    if (ev.target && ev.target.closest && ev.target.closest("#pc-collect-panel")) return;
+    onToolKind(toolClickKind(ev));
+  };
+  document.addEventListener("click", onToolPointer, true);
+  document.addEventListener("pointerup", onToolPointer, true);
+  window.addEventListener("message", (ev) => {
+    if (!ev.data || ev.data.__pcCollect !== 1) return;
+    onToolKind(ev.data.kind);
+  });
+  try {
+    chrome.runtime.sendMessage({ type: "pc-collect-hook-clicks" }, () => {
+      void chrome.runtime.lastError;
+    });
+  } catch (e) {}
 
   document.addEventListener(
     "copy",
@@ -92,6 +108,10 @@
     if (pageId) payload.itemId = pageId;
     const stored = harvestZzbStore();
     const tableSkus = extractSkus();
+    // 至尊宝 iframe 跨域读不到 top.location，用 pack/fileList 上的商品 ID 对齐当前页。
+    if (!payload.itemId && stored.packItemId && stored.listItemId && stored.packItemId === stored.listItemId) {
+      payload.itemId = stored.packItemId;
+    }
     // 至尊宝 localStorage 全站共用。优先认和当前商品 ID 一致的那份；
     // pack 还是上一件、但 fileList 已更新时标 zzbPackMismatch，点过工具后仍可入库。
     const listMatch = !!(pageId && stored.listItemId && stored.listItemId === pageId);
@@ -111,11 +131,9 @@
       payload.images = stored.images;
       payload.videos = stored.videos;
       payload.skus = mergeSkuRows(stored.skus, tableSkus);
-      if (tableSkus.length) payload.clickedSku = true;
-      if (stored.storedTitle && storeOk) payload.zzbTitle = stored.storedTitle;
+      if (stored.storedTitle && (storeOk || stored.packItemId)) payload.zzbTitle = stored.storedTitle;
     } else if (tableSkus.length) {
       payload.replaceSkus = true;
-      payload.clickedSku = true;
       payload.skus = tableSkus;
     }
     return payload;
@@ -213,7 +231,8 @@
 
   function zzbStoredTitle() {
     const pack = lsJson("sku复制传值数据");
-    const t = pack && pack.myItemInfo && pack.myItemInfo.item && pack.myItemInfo.item.title;
+    const item = pack && pack.myItemInfo && pack.myItemInfo.item;
+    const t = (item && item.title) || (pack && pack.itemTitle);
     return looksLikeTitle(t);
   }
 
@@ -301,7 +320,7 @@
     let zzbItemId = packItemId;
     if (pageId && listItemId === pageId) zzbItemId = listItemId;
     else if (pageId && packItemId && packItemId !== pageId && listItemId) zzbItemId = listItemId;
-    if (pack && pack.myItemInfo && !Array.isArray(list)) {
+    if (pack && pack.myItemInfo) {
       const info = pack.myItemInfo;
       if (info.pcVideo) addVid(info.pcVideo);
       if (Array.isArray(info.item && info.item.videos)) {
@@ -1060,9 +1079,11 @@
       }
       const categories = [];
       flattenCategories(res.categories || [], "", categories);
-      chrome.storage.local.get(["brandId", "categoryId"], (saved) => {
-        fillSelect(brandEl, res.brands || [], saved && saved.brandId, "无品牌");
-        fillSelect(categoryEl, categories, saved && saved.categoryId, "无分类");
+      chrome.storage.local.get(["brandId", "categoryId", "choiceItemId"], (saved) => {
+        const itemId = pageItemId();
+        const sameItem = !!(saved && saved.choiceItemId && itemId && String(saved.choiceItemId) === String(itemId));
+        fillSelect(brandEl, res.brands || [], sameItem ? saved.brandId : 0, sameItem ? "无品牌" : "");
+        fillSelect(categoryEl, categories, sameItem ? saved.categoryId : 0, sameItem ? "无分类" : "");
       });
     });
   }
@@ -1094,11 +1115,11 @@
     el.value = pick ? String(pick) : "";
     el.onchange = () => {
       const key = el.id === "pc-brand" ? "brandId" : "categoryId";
-      chrome.storage.local.set({ [key]: Number(el.value) || 0 });
+      chrome.storage.local.set({ [key]: Number(el.value) || 0, choiceItemId: pageItemId() });
     };
     if (pick) {
       const key = el.id === "pc-brand" ? "brandId" : "categoryId";
-      chrome.storage.local.set({ [key]: pick });
+      chrome.storage.local.set({ [key]: pick, choiceItemId: pageItemId() });
     }
   }
 
