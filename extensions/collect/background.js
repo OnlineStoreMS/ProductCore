@@ -226,12 +226,13 @@ function mergeHarvest(tabId, incoming) {
     if (Array.isArray(incoming.images) && incoming.images.length) cur.images = incoming.images;
     if (Array.isArray(incoming.videos)) cur.videos = incoming.videos;
   }
-  // SKU：点过「SKU工具」后才收规格表 / 弹层 SKU。
-  if (cur.clickedSku && Array.isArray(incoming.skus) && incoming.skus.length && (trusted || incoming.replaceSkus)) {
-    if (incoming.fromZzbStore || incoming.replaceSkus) {
-      cur.skus = mergeSkuState(incoming.skus, cur.skus);
-    } else {
-      cur.skus = mergeSkuState(cur.skus, incoming.skus);
+  // SKU：点过「SKU工具」后才收。必须是当前商品的规格表 / 对得上 ID 的 pack，不能把上一件并进来。
+  if (cur.clickedSku && Array.isArray(incoming.skus) && incoming.skus.length) {
+    const idOk = storeMatchesPage(cur, incoming);
+    const pageId = String(cur.itemId || incoming.itemId || "");
+    const skus = incoming.skus.filter((row) => !row || !row.itemId || !pageId || String(row.itemId) === pageId);
+    if (skus.length && (incoming.replaceSkus || (incoming.fromZzbStore && idOk))) {
+      cur.skus = overlaySkuState(skus, cur.skus);
     }
   }
   tabState.set(tabId, cur);
@@ -267,9 +268,6 @@ function acceptClickedStore(cur, incoming) {
   if (clickedMedia && hasMedia && (!(cur.images && cur.images.length) || incoming.zzbPackMismatch || !zzb || (zzb && page && zzb !== page))) {
     return true;
   }
-  if (clickedSku && hasSkus && (!(cur.skus && cur.skus.length) || incoming.zzbPackMismatch || !zzb || (zzb && page && zzb !== page))) {
-    return true;
-  }
   return false;
 }
 
@@ -289,6 +287,71 @@ function skuStateKey(row) {
   return String(row.specValue || row.name || "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** 去掉规格名后的取值指纹，用来把「颜色分类:黑」和「黑/M」对上。 */
+function skuValueKey(row) {
+  if (!row) return "";
+  const vals = [];
+  const specs = row.specs;
+  if (specs && typeof specs === "object") {
+    Object.keys(specs).forEach((k) => {
+      const v = String(specs[k] == null ? "" : specs[k]).replace(/\s+/g, " ").trim();
+      if (v) vals.push(v);
+    });
+  }
+  if (!vals.length) {
+    const sv = String(row.specValue || row.name || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (sv) vals.push(sv);
+  }
+  const parts = [];
+  vals.forEach((v) => {
+    String(v)
+      .split(/[/／;；|]+/)
+      .forEach((bit) => {
+        const s = String(bit || "")
+          .replace(/^[^:：]{1,16}[:：]/, "")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (s) parts.push(s);
+      });
+  });
+  return parts.sort().join("\0");
+}
+
+function overlaySkuState(baseList, extraList) {
+  const extra = new Map();
+  const extraVal = new Map();
+  (extraList || []).forEach((row) => {
+    const key = skuStateKey(row);
+    const vkey = skuValueKey(row);
+    if (key) extra.set(key, row);
+    if (vkey) extraVal.set(vkey, row);
+  });
+  return (baseList || [])
+    .map((row) => {
+      if (!row) return null;
+      const key = skuStateKey(row);
+      if (!key) return null;
+      const prev = extra.get(key) || extraVal.get(skuValueKey(row));
+      const out = Object.assign({}, row, {
+        specValue: row.specValue || key,
+        name: row.name || row.specValue || key,
+        specs: row.specs ? Object.assign({}, row.specs) : undefined,
+        dimensions: row.dimensions ? row.dimensions.slice() : undefined,
+      });
+      if (!(out.price > 0) && prev && prev.price > 0) {
+        out.price = prev.price;
+        out.originalPrice = prev.originalPrice || prev.price;
+      }
+      if (!(out.originalPrice > 0) && prev && prev.originalPrice > 0) out.originalPrice = prev.originalPrice;
+      if (!(out.stock > 0) && prev && prev.stock > 0) out.stock = prev.stock;
+      if (!out.pic && prev && prev.pic) out.pic = prev.pic;
+      return out;
+    })
+    .filter(Boolean);
 }
 
 function mergeSkuState(oldList, nextList) {
@@ -442,17 +505,19 @@ function pollOneMediaTab(state, tabId) {
         if (data.zzbTitle && String(data.zzbTitle).length > String(zzbTitle).length) zzbTitle = data.zzbTitle;
       });
       if (!images.length && !videos.length && !skus.length && !zzbTitle) return;
+      const packOk = !packItemId || !state.itemId || String(packItemId) === String(state.itemId);
+      const listOk = !listItemId || !state.itemId || String(listItemId) === String(state.itemId);
       mergeHarvest(tabId, {
         fromZzbStore: true,
         itemId: state.itemId,
-        zzbPackMismatch: true,
+        zzbPackMismatch: !packOk,
         listItemId,
         packItemId,
         zzbItemId: listItemId || packItemId,
-        images,
-        videos,
-        skus,
-        zzbTitle,
+        images: packOk || listOk ? images : [],
+        videos: packOk || listOk ? videos : [],
+        skus: packOk ? skus : [],
+        zzbTitle: packOk ? zzbTitle : "",
       });
       persistTab(tabId);
       pushToTab(tabId);
@@ -552,7 +617,23 @@ function scrapeZzbStoreMainWorld() {
     if (!key || seenSku[key]) return;
     seenSku[key] = 1;
     const url = clean(item.url);
-    const priceNum = Number(item.price);
+    const firstPrice = (...vals) => {
+      for (let i = 0; i < vals.length; i++) {
+        const n = Number(vals[i]);
+        if (isFinite(n) && n > 0) return n;
+      }
+      return 0;
+    };
+    const priceNum = firstPrice(
+      item.originPrice,
+      item.originalPrice,
+      item.salePrice,
+      item.skuPrice,
+      item["原价"],
+      item["销售价"],
+      item["市场价"],
+      item.price
+    );
     const qty = Number(item.quantity != null ? item.quantity : item.stock);
     skus.push({
       name: parsed.name,
@@ -561,9 +642,9 @@ function scrapeZzbStoreMainWorld() {
       specs: parsed.specs,
       dimensions: parsed.dimensions,
       pic: url && isImg(url) ? url : "",
-      price: priceNum > 0 ? priceNum : 0,
-      originalPrice: priceNum > 0 ? priceNum : 0,
-      stock: qty > 0 ? qty : 0,
+      price: priceNum,
+      originalPrice: priceNum,
+      stock: isFinite(qty) && qty > 0 ? qty : 0,
     });
   };
   list.forEach((item) => {
@@ -638,13 +719,41 @@ function pollOneSkuTab(state, tabId) {
         target: { tabId, allFrames: true },
         world: "MAIN",
         func: scrapeSkuMainWorld,
+        args: [String(state.itemId || "")],
       },
       (results) => {
         if (chrome.runtime.lastError || !results) return;
-        const rows = [];
+        const byKey = new Map();
+        const byVal = new Map();
         results.forEach((item) => {
-          if (Array.isArray(item.result)) rows.push.apply(rows, item.result);
+          (item.result || []).forEach((row) => {
+            const key = skuStateKey(row);
+            const vkey = skuValueKey(row);
+            if (!key) return;
+            const prev = byKey.get(key) || (vkey && byVal.get(vkey));
+            if (!prev) {
+              byKey.set(key, row);
+              if (vkey) byVal.set(vkey, row);
+              return;
+            }
+            if (row.price > 0 && !(prev.price > 0)) {
+              prev.price = row.price;
+              prev.originalPrice = row.originalPrice || row.price;
+            }
+            if (!(prev.originalPrice > 0) && row.originalPrice > 0) prev.originalPrice = row.originalPrice;
+            if (row.stock > 0) prev.stock = row.stock;
+            if (row.pic && !prev.pic) prev.pic = row.pic;
+            if (row.specs && Object.keys(row.specs).length > Object.keys(prev.specs || {}).length) {
+              prev.specs = row.specs;
+              prev.dimensions = row.dimensions;
+              prev.specName = row.specName;
+              prev.specValue = row.specValue;
+              prev.name = row.name || prev.name;
+              byKey.set(skuStateKey(prev), prev);
+            }
+          });
         });
+        const rows = Array.from(new Set(byKey.values()));
         if (!rows.length) return;
         mergeHarvest(tabId, { skus: rows, replaceSkus: true, itemId: state.itemId });
         persistTab(tabId);
@@ -653,12 +762,13 @@ function pollOneSkuTab(state, tabId) {
     );
 }
 
-function scrapeSkuMainWorld() {
+function scrapeSkuMainWorld(pageItemId) {
+  const wantId = String(pageItemId || "").trim();
   const text = ((document.body && document.body.innerText) || "").replace(/\r/g, "");
-  if (/资源一键下载|全选 \(/.test(text) && !/请输入SKU名称|计算价格|颜色分类[:：]/.test(text)) return [];
-  if (!/原价/.test(text) || !/库存/.test(text)) {
-    if (!/请输入SKU名称|颜色分类[:：]/.test(text)) return [];
-  }
+  const skuTool =
+    /请输入SKU名称|计算价格设置|颜色分类[:：]/.test(text) ||
+    (/原价/.test(text) && /库存/.test(text) && /名称/.test(text));
+  const isResource = /资源一键下载|全选 \(/.test(text) && !skuTool;
   const rows = [];
   const seen = {};
   const DEFAULT_SPEC_NAME = "商品规格";
@@ -772,7 +882,7 @@ function scrapeSkuMainWorld() {
     const text = String(v == null ? "" : v).replace(/\s+/g, "").trim();
     if (!text || /^(?:-|—|–|\*|无|无库存|空|-1)$/.test(text)) return 0;
     const n = Number(text.replace(/,/g, "").replace(/[^\d.-]/g, ""));
-    return isFinite(n) && n > 0 ? n : 0;
+    return isFinite(n) && n > 0 && n < 1000000 ? n : 0;
   };
   const parseStockNum = (v) => {
     const stockText = String(v == null ? "" : v).replace(/\s+/g, "").trim();
@@ -781,7 +891,10 @@ function scrapeSkuMainWorld() {
     return isFinite(stockNum) && stockNum > 0 ? stockNum : 0;
   };
   const push = (name, price, stock) => {
-    const raw = String(name || "")
+    const rawName = String(name || "");
+    const rowItemId = (rawName.match(/商品ID[:：]\s*(\d{5,})/) || [])[1] || "";
+    if (wantId && rowItemId && rowItemId !== wantId) return;
+    const raw = rawName
       .replace(/\s*商品ID[:：]\s*\d+\s*/g, " ")
       .replace(/\s+/g, " ")
       .trim();
@@ -816,6 +929,7 @@ function scrapeSkuMainWorld() {
       originalPrice: priceNum,
       stock: stockNum,
     };
+    if (rowItemId) row.itemId = rowItemId;
     seen[key] = row;
     rows.push(row);
   };
@@ -828,33 +942,231 @@ function scrapeSkuMainWorld() {
         item.skuName ||
         item.name ||
         (item.specName && item.specValue ? item.specName + ":" + item.specValue : "");
-      const price =
-        item["原价"] ||
-        item["销售价"] ||
-        item["市场价"] ||
-        item.originPrice ||
-        item.originalPrice ||
-        item.salePrice ||
-        item.price;
+      const price = [
+        item["原价"],
+        item["销售价"],
+        item["市场价"],
+        item.originPrice,
+        item.originalPrice,
+        item.salePrice,
+        item.skuPrice,
+        item.price,
+      ].find((v) => parseMoney(v) > 0);
       const stock = item["库存"] != null ? item["库存"] : item.quantity != null ? item.quantity : item.stock;
-      if (name) push(name, price, stock);
+      const id = String(item.itemId || item.numIid || item["商品ID"] || "").trim();
+      if (name) push(id && /^\d{5,}$/.test(id) ? name + " 商品ID:" + id : name, price, stock);
     });
   };
+  if (skuTool && !isResource) {
+    try {
+      const cache = window.layui && window.layui.table && window.layui.table.cache;
+      if (cache) Object.keys(cache).forEach((k) => harvestObjects(cache[k]));
+    } catch (e) {}
+    try {
+      document.querySelectorAll(".el-table, .layui-table-view").forEach((el) => {
+        const vue = el.__vue__;
+        const data = vue && vue.store && vue.store.states && vue.store.states.data;
+        if (Array.isArray(data)) harvestObjects(data);
+      });
+    } catch (e) {}
+    const re =
+      /([^\n]{2,120}[:：][^\n]{1,160})\n\s*商品ID[:：]\s*\d+\s*\n\s*(\d+(?:\.\d+)?|-|-1)\s*\n\s*([^\n]*)\s*\n\s*([^\n]*)/g;
+    let m;
+    while ((m = re.exec(text))) push(m[1], parseMoney(m[2]) || parseMoney(m[3]), m[4]);
+  }
+  const valueKey = (row) => {
+    const vals = [];
+    const specs = row && row.specs;
+    if (specs && typeof specs === "object") {
+      Object.keys(specs).forEach((k) => {
+        const v = String(specs[k] == null ? "" : specs[k]).replace(/\s+/g, " ").trim();
+        if (v) vals.push(v);
+      });
+    }
+    if (!vals.length) {
+      const sv = String((row && (row.specValue || row.name)) || "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (sv) vals.push(sv);
+    }
+    const parts = [];
+    vals.forEach((v) => {
+      String(v)
+        .split(/[/／;；|]+/)
+        .forEach((bit) => {
+          const s = String(bit || "")
+            .replace(/^[^:：]{1,16}[:：]/, "")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (s) parts.push(s);
+        });
+    });
+    return parts.sort().join("\0");
+  };
+  const fillExisting = (name, price, stock) => {
+    const priceNum = parseMoney(price);
+    if (!(priceNum > 0)) return;
+    const raw = String(name || "")
+      .replace(/\s*商品ID[:：]\s*\d+\s*/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const parsed = parseSkuName(raw);
+    const specValue = parsed.specValue;
+    if (!specValue) return;
+    const key = rowKey({ specs: parsed.specs, specValue: specValue });
+    let prev = seen[key];
+    if (!prev) {
+      const vkey = valueKey({ specs: parsed.specs, specValue: specValue, name: raw });
+      if (vkey) {
+        const keys = Object.keys(seen);
+        for (let i = 0; i < keys.length; i++) {
+          if (valueKey(seen[keys[i]]) === vkey) {
+            prev = seen[keys[i]];
+            break;
+          }
+        }
+      }
+    }
+    if (prev) {
+      if (!(prev.price > 0)) {
+        prev.price = priceNum;
+        prev.originalPrice = priceNum;
+      }
+      return;
+    }
+    if (/item\.taobao|detail\.tmall/i.test(location.href || "")) push(raw, priceNum, stock);
+  };
+  const tbMoney = (p) => {
+    if (p == null) return 0;
+    if (typeof p === "object") {
+      const fromText = tbMoney(p.priceText) || tbMoney(p.price);
+      if (fromText > 0) return fromText;
+      if (p.priceMoney != null) {
+        const n = Number(p.priceMoney);
+        if (!isFinite(n) || n <= 0) return 0;
+        if (n >= 1000) return n / 100;
+        return n < 1000000 ? n : 0;
+      }
+      return 0;
+    }
+    return parseMoney(p);
+  };
+  const harvestSkuBaseCore = (root) => {
+    if (!root || typeof root !== "object") return;
+    const hits = { core: [], base: [] };
+    const seenObj = typeof WeakSet === "function" ? new WeakSet() : null;
+    const prefer = (k) => (/sku|item|data|res|loader|home|props|core|module/i.test(k) ? 0 : 1);
+    const find = (obj, depth) => {
+      if (!obj || typeof obj !== "object" || depth > 16) return;
+      if (seenObj) {
+        if (seenObj.has(obj)) return;
+        seenObj.add(obj);
+      }
+      if (obj.sku2info && typeof obj.sku2info === "object") hits.core.push(obj);
+      if (obj.skuCore && obj.skuCore.sku2info) hits.core.push(obj.skuCore);
+      if (Array.isArray(obj.skus) && Array.isArray(obj.props)) hits.base.push(obj);
+      if (obj.skuBase && Array.isArray(obj.skuBase.skus) && Array.isArray(obj.skuBase.props)) hits.base.push(obj.skuBase);
+      if (hits.core.length && hits.base.length) return;
+      if (Array.isArray(obj)) {
+        const n = Math.min(obj.length, 120);
+        for (let i = 0; i < n; i++) {
+          try {
+            find(obj[i], depth + 1);
+          } catch (e) {}
+          if (hits.core.length && hits.base.length) return;
+        }
+        return;
+      }
+      const keys = Object.keys(obj).sort((a, b) => prefer(a) - prefer(b));
+      const limit = Math.min(keys.length, 100);
+      for (let i = 0; i < limit; i++) {
+        try {
+          find(obj[keys[i]], depth + 1);
+        } catch (e) {}
+        if (hits.core.length && hits.base.length) return;
+      }
+    };
+    find(root, 0);
+    const infoMap = {};
+    hits.core.forEach((core) => {
+      const map = (core && core.sku2info) || {};
+      Object.keys(map).forEach((id) => {
+        if (id === "0") return;
+        if (!infoMap[id]) infoMap[id] = map[id];
+      });
+    });
+    hits.base.forEach((base) => {
+      const vidName = {};
+      (base.props || []).forEach((prop) => {
+        const pid = String((prop && prop.pid) || "");
+        const propName = String((prop && prop.name) || "").trim();
+        ((prop && prop.values) || []).forEach((val) => {
+          if (!val) return;
+          const vid = String(val.vid || val.id || "");
+          const name = String(val.name || val.value || "").trim();
+          if (!name) return;
+          const packed = propName ? propName + ":" + name : name;
+          if (pid && vid) vidName[pid + ":" + vid] = packed;
+          if (vid) vidName[vid] = packed;
+        });
+      });
+      (base.skus || []).forEach((sku) => {
+        if (!sku) return;
+        const skuId = String(sku.skuId || sku.sku_id || "");
+        if (skuId === "0") return;
+        const info = infoMap[skuId] || infoMap[sku.skuId] || sku;
+        const spec = String(sku.propPath || sku.props || "")
+          .split(";")
+          .map((pp) => vidName[pp] || vidName[String(pp).split(":").pop()] || "")
+          .filter(Boolean)
+          .join(";") || String(sku.propName || sku.skuName || "").trim();
+        const price = tbMoney(info && info.price) || tbMoney(sku.price);
+        const stock = info && info.quantity != null ? info.quantity : sku.quantity;
+        if (spec) fillExisting(spec, price, stock);
+      });
+    });
+  };
+  const roots = [];
+  const pushRoot = (obj) => {
+    if (obj && typeof obj === "object") roots.push(obj);
+  };
   try {
-    const cache = window.layui && window.layui.table && window.layui.table.cache;
-    if (cache) Object.keys(cache).forEach((k) => harvestObjects(cache[k]));
+    const ice = window.__ICE_APP_CONTEXT__;
+    const ld = ice && ice.loaderData;
+    if (ld && typeof ld === "object") {
+      Object.keys(ld).forEach((k) => {
+        const node = ld[k];
+        pushRoot(node);
+        pushRoot(node && node.data);
+        pushRoot(node && node.data && node.data.res);
+      });
+    }
   } catch (e) {}
+  ["__INITIAL_DATA__", "__INITIAL_STATE__", "__ICE_APP_CONTEXT__", "__NEXT_DATA__", "Hub", "_item_detail", "g_config"].forEach(
+    (key) => {
+      try {
+        if (window[key]) roots.push(window[key]);
+      } catch (e) {}
+    }
+  );
   try {
-    document.querySelectorAll(".el-table, .layui-table-view").forEach((el) => {
-      const vue = el.__vue__;
-      const data = vue && vue.store && vue.store.states && vue.store.states.data;
-      if (Array.isArray(data)) harvestObjects(data);
+    document.querySelectorAll("script").forEach((s) => {
+      const t = s.textContent || "";
+      if (t.length < 80 || t.length > 800000) return;
+      if (!/sku2info|skuCore|skuBase/.test(t)) return;
+      const start = t.indexOf("{");
+      const end = t.lastIndexOf("}");
+      if (start < 0 || end <= start) return;
+      try {
+        roots.push(JSON.parse(t.slice(start, end + 1)));
+      } catch (e) {}
     });
   } catch (e) {}
-  const re =
-    /([^\n]{2,120}[:：][^\n]{1,160})\n\s*商品ID[:：]\s*\d+\s*\n\s*(\d+(?:\.\d+)?|-)\s*\n\s*([^\n]*)\s*\n\s*([^\n]*)/g;
-  let m;
-  while ((m = re.exec(text))) push(m[1], parseMoney(m[2]) || parseMoney(m[3]), m[4]);
+  roots.forEach((root) => {
+    try {
+      harvestSkuBaseCore(root);
+    } catch (e) {}
+  });
   return rows;
 }
 
