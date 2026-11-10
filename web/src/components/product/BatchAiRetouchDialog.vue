@@ -135,6 +135,7 @@ async function run() {
   busy.value = true
   let done = 0
   try {
+    // 通用逐张处理：不走厂商 Batch API，一张完成再下一张，单张失败继续后面。
     for (const row of rows.value) {
       if (id !== runId) return
       if (!row.selected) continue
@@ -254,9 +255,11 @@ function replaceSelected() {
           placeholder="描述要改成什么样，例如把背景换成纯白、去掉杂物、让商品更清晰"
           :disabled="busy"
         />
-        <el-button type="primary" :loading="busy" @click="run">{{ busy ? `修图 ${progress}` : '修图' }}</el-button>
+        <el-button type="primary" :loading="busy" @click="run">{{ busy ? `逐张修图 ${progress}` : '修图' }}</el-button>
         <el-button :disabled="!replaceCount || busy" @click="replaceSelected">替换当前图</el-button>
-        <p class="hint">只替换已勾选并且已经出结果的图片。没勾选、没出结果的保持原图。替换后，点页面上的保存才会写进这件商品。</p>
+        <p class="hint">
+          按勾选顺序逐张修图（含 Grok Image），单张失败不影响其他。只替换已勾选且已出结果的图；替换后还要在商品页点保存才会写入。
+        </p>
       </aside>
     </div>
     <el-image-viewer v-if="previewUrl" :url-list="[previewUrl]" teleported :z-index="4000" @close="previewUrl = ''" />

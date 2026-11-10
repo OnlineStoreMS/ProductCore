@@ -84,7 +84,7 @@ onMounted(load)
         </div>
       </template>
       <p class="hint">
-        默认使用 AI 大模型管理中心里已启用的生图 / 图片编辑模型。可配置千问、Grok 及其他厂商。商品修图弹窗也会先带出这个默认值，仍可临时换成别的模型。
+        默认使用 AI 大模型管理中心里已启用的生图 / 图片编辑模型（含 Grok Imagine Image）。批量修图统一逐张调用，不依赖厂商 Batch API。商品修图弹窗会先带出这个默认值，仍可临时换成别的模型。
       </p>
       <el-form label-width="120px" class="form">
         <el-form-item label="默认图片模型">

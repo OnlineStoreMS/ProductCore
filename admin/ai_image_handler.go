@@ -101,10 +101,15 @@ func (h *AIImageHandler) Retouch(c *gin.Context) {
 		modelName = resolved
 		connID = resolvedConn
 	}
-	size, err := retouchOutputSize(ctx, h.store, imageURL)
-	if err != nil {
-		response.Fail(c, http.StatusBadRequest, err.Error())
-		return
+	// 通用逐张修图：按模型能力决定是否带 size。Grok / xAI 不支持 size，也不要为它先读尺寸（避免无关失败）。
+	size := ""
+	if !retouchSkipSize(modelName, h.providerOf(c, modelName, connID)) {
+		var err error
+		size, err = retouchOutputSize(ctx, h.store, imageURL)
+		if err != nil {
+			response.Fail(c, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 	remote, err := h.client.Retouch(ctx, aimodel.RetouchInput{
 		TenantID:     tenantID,
@@ -371,6 +376,34 @@ func jsonText(raw json.RawMessage, fallback string) string {
 		return fallback
 	}
 	return string(raw)
+}
+
+func (h *AIImageHandler) providerOf(c *gin.Context, modelName string, connID uint64) string {
+	if h.settings == nil {
+		return ""
+	}
+	list, err := h.settings.ForTenant(authcontext.TenantID(c)).ListImageModels(c.Request.Context())
+	if err != nil {
+		return ""
+	}
+	for _, m := range list {
+		if m.ModelID != modelName {
+			continue
+		}
+		if connID > 0 && m.ConnectionID != connID {
+			continue
+		}
+		return strings.TrimSpace(m.ProviderCode)
+	}
+	return ""
+}
+
+func retouchSkipSize(modelName, providerCode string) bool {
+	if strings.EqualFold(strings.TrimSpace(providerCode), "xai") {
+		return true
+	}
+	m := strings.ToLower(strings.TrimSpace(modelName))
+	return strings.Contains(m, "grok-imagine") || strings.HasPrefix(m, "grok-imagine")
 }
 
 func retouchOutputSize(ctx context.Context, store storage.Storage, imageURL string) (string, error) {
